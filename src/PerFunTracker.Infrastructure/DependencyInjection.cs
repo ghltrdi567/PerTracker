@@ -31,7 +31,8 @@ public static class DependencyInjection
         {
             options.SignIn.RequireConfirmedEmail = true;
         })
-            .AddEntityFrameworkStores<ApplicationDbContext>();
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddDefaultTokenProviders();
 
         // Options
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
