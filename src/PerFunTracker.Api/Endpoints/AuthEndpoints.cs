@@ -183,11 +183,13 @@ public static class AuthEndpoints
 
     private static void SetRefreshCookie(HttpContext ctx, string token)
     {
+        var isDev = ctx.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
+
         ctx.Response.Cookies.Append(RefreshCookieName, token, new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
+            Secure = !isDev,
+            SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.Strict,
             Path = "/api/auth",
             Expires = DateTimeOffset.UtcNow.AddDays(7),
         });
