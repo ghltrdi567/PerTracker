@@ -41,6 +41,7 @@ public static class DependencyInjection
         // Services
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IEmailSender, MailKitEmailSender>();
+        services.AddSingleton<IEmailNotificationQueue, ChannelEmailNotificationQueue>();
 
         return services;
     }

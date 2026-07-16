@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using PerFunTracker.Api.Models;
 using PerFunTracker.Core.Entities;
+using PerFunTracker.Core.Services;
 using PerFunTracker.Infrastructure.Data;
 
 namespace PerFunTracker.Api.Endpoints;
@@ -27,6 +28,8 @@ public static class EventEndpoints
         group.MapDelete("/{id:guid}", DeleteEvent);
         group.MapPost("/{id:guid}/participants", AddParticipant);
         group.MapDelete("/{id:guid}/participants/{userId}", RemoveParticipant);
+        group.MapPost("/{id:guid}/complete", MarkComplete);
+        group.MapGet("/{id:guid}/completions", ListCompletions);
 
         return app;
     }
@@ -286,6 +289,101 @@ public static class EventEndpoints
         await db.SaveChangesAsync();
 
         return TypedResults.NoContent();
+    }
+
+    // --- POST /api/events/{id}/complete — mark event complete (participants only) ---
+
+    private static async Task<Results<Created<CompletionResponse>, NotFound>> MarkComplete(
+        Guid id,
+        MarkCompleteRequest request,
+        ApplicationDbContext db,
+        IEmailNotificationQueue notificationQueue,
+        HttpContext ctx)
+    {
+        var userId = GetUserId(ctx);
+
+        var evt = await db.Events
+            .Include(e => e.Participants)
+                .ThenInclude(p => p.User)
+            .FirstOrDefaultAsync(e => e.Id == id);
+
+        if (evt is null)
+            return TypedResults.NotFound();
+
+        // Only participants can mark complete
+        var participant = evt.Participants.FirstOrDefault(p => p.UserId == userId);
+        if (participant is null)
+            return TypedResults.NotFound();
+
+        var completer = participant.User!;
+
+        var completion = new EventCompletion
+        {
+            EventId = evt.Id,
+            CompletedByUserId = userId,
+            CompletedAt = DateTime.UtcNow,
+            Note = request.Note,
+        };
+
+        db.EventCompletions.Add(completion);
+        await db.SaveChangesAsync();
+
+        // Enqueue email notifications for OTHER participants with the flag on
+        foreach (var p in evt.Participants)
+        {
+            if (p.UserId == userId)
+                continue; // skip the completer themselves
+
+            if (!p.User!.NotifyByEmailOnCompletion)
+                continue;
+
+            var message = new EmailNotificationMessage(
+                p.User.Email!,
+                p.User.DisplayName,
+                evt.Title,
+                completer.DisplayName,
+                completion.CompletedAt,
+                request.Note);
+
+            await notificationQueue.EnqueueAsync(message);
+        }
+
+        var response = new CompletionResponse(
+            completion.Id,
+            userId,
+            completer.DisplayName,
+            completion.CompletedAt,
+            completion.Note);
+
+        return TypedResults.Created($"/api/events/{evt.Id}/completions", response);
+    }
+
+    // --- GET /api/events/{id}/completions — completion history (participants only) ---
+
+    private static async Task<Results<Ok<List<CompletionResponse>>, NotFound>> ListCompletions(
+        Guid id,
+        ApplicationDbContext db,
+        HttpContext ctx)
+    {
+        var userId = GetUserId(ctx);
+
+        // Verify the user is a participant
+        var isParticipant = await db.EventParticipants.AnyAsync(p => p.EventId == id && p.UserId == userId);
+        if (!isParticipant)
+            return TypedResults.NotFound();
+
+        var completions = await db.EventCompletions
+            .Where(c => c.EventId == id)
+            .OrderByDescending(c => c.CompletedAt)
+            .Select(c => new CompletionResponse(
+                c.Id,
+                c.CompletedByUserId,
+                c.CompletedBy!.DisplayName,
+                c.CompletedAt,
+                c.Note))
+            .ToListAsync();
+
+        return TypedResults.Ok(completions);
     }
 
     // --- Helper: extract user ID from JWT claims ---
