@@ -48,6 +48,7 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapGet("/", () => "PerFunTracker API");
 app.MapAuthEndpoints();
+app.MapEventEndpoints();
 
 // Auto-apply migrations on startup
 using (var scope = app.Services.CreateScope())
