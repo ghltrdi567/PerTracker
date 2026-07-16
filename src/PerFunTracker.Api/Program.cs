@@ -1,9 +1,11 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using PerFunTracker.Api.Endpoints;
 using PerFunTracker.Core.Options;
 using PerFunTracker.Infrastructure;
+using PerFunTracker.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,5 +48,12 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapGet("/", () => "PerFunTracker API");
 app.MapAuthEndpoints();
+
+// Auto-apply migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
 
 app.Run();
