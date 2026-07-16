@@ -3,7 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PerFunTracker.Core.Entities;
+using PerFunTracker.Core.Options;
+using PerFunTracker.Core.Services;
+using PerFunTracker.Infrastructure.Auth;
 using PerFunTracker.Infrastructure.Data;
+using PerFunTracker.Infrastructure.Email;
 
 namespace PerFunTracker.Infrastructure;
 
@@ -13,7 +17,7 @@ namespace PerFunTracker.Infrastructure;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Registers PostgreSQL DbContext and ASP.NET Core Identity.
+    /// Registers PostgreSQL DbContext, ASP.NET Core Identity, JWT, and email services.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
@@ -28,6 +32,14 @@ public static class DependencyInjection
             options.SignIn.RequireConfirmedEmail = true;
         })
             .AddEntityFrameworkStores<ApplicationDbContext>();
+
+        // Options
+        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
+
+        // Services
+        services.AddSingleton<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IEmailSender, MailKitEmailSender>();
 
         return services;
     }

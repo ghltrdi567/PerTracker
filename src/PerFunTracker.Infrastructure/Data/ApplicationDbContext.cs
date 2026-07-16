@@ -15,6 +15,7 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
     public DbSet<TrackerEvent> Events => Set<TrackerEvent>();
     public DbSet<EventParticipant> EventParticipants => Set<EventParticipant>();
     public DbSet<EventCompletion> EventCompletions => Set<EventCompletion>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -72,6 +73,24 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.CompletedByUserId).IsRequired();
             e.Property(x => x.CompletedAt).IsRequired();
             e.Property(x => x.Note).HasMaxLength(1000);
+        });
+
+        // RefreshToken
+        builder.Entity<RefreshToken>(e =>
+        {
+            e.HasKey(x => x.Id);
+
+            e.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.Property(x => x.Token).IsRequired().HasMaxLength(256);
+            e.Property(x => x.UserId).IsRequired();
+            e.Property(x => x.ExpiresAt).IsRequired();
+            e.Property(x => x.CreatedAt).IsRequired();
+
+            e.HasIndex(x => x.Token);
         });
     }
 }
