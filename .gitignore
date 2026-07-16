@@ -1,0 +1,54 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rmts/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio
+.vs/
+*.rsuser
+*.vspscc
+*.vssscc
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+## Test results
+TestResults/
+[Tt]est[Rr]esult*/
+
+## Node / Frontend
+node_modules/
+dist/
+.next/
+
+## Docker
+docker-compose.override.yml
+
+## Env / secrets
+.env
+.env.*
+!.env.example
+*.pfx
+*.key
+
+## OS
+.DS_Store
+Thumbs.db

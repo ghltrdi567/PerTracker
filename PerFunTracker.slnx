@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PerFunTracker.Api/PerFunTracker.Api.csproj" />
+    <Project Path="src/PerFunTracker.Core/PerFunTracker.Core.csproj" />
+    <Project Path="src/PerFunTracker.Infrastructure/PerFunTracker.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PerFunTracker.Tests/PerFunTracker.Tests.csproj" />
+  </Folder>
+</Solution>
