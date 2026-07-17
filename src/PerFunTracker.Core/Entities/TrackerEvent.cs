@@ -14,6 +14,10 @@ public class TrackerEvent
     /// <summary>Optional description.</summary>
     public string? Description { get; set; }
 
+    /// <summary>Optional category ID (null = uncategorized).</summary>
+    public Guid? CategoryId { get; set; }
+    public Category? Category { get; set; }
+
     /// <summary>User who created the event.</summary>
     public string OwnerUserId { get; set; } = string.Empty;
 

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,8 @@ namespace PerFunTracker.Api.Endpoints;
 /// </summary>
 public static class EventEndpoints
 {
+    private const int MaxPageSize = 100;
+
     public static IEndpointRouteBuilder MapEventEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/events").RequireAuthorization();
@@ -34,31 +37,47 @@ public static class EventEndpoints
         return app;
     }
 
-    // --- GET /api/events — list events where current user is a participant ---
+    // --- GET /api/events — paginated list where current user is a participant ---
 
-    private static async Task<Ok<List<EventResponse>>> ListEvents(
+    private static async Task<Ok<PagedResult<EventResponse>>> ListEvents(
         ApplicationDbContext db,
-        HttpContext ctx)
+        HttpContext ctx,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
         var userId = GetUserId(ctx);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
-        var events = await db.Events
-            .Where(e => e.Participants.Any(p => p.UserId == userId))
-            .Select(e => new EventResponse(
-                e.Id,
-                e.Title,
-                e.Description,
-                e.OwnerUserId,
-                e.CreatedAt,
-                e.Participants.Select(p => new ParticipantResponse(
-                    p.UserId,
-                    p.User!.DisplayName,
-                    p.User!.Email!,
-                    p.Role,
-                    p.JoinedAt)).ToList()))
+        var baseQuery = db.Events
+            .Where(e => e.Participants.Any(p => p.UserId == userId));
+
+        var total = await baseQuery.CountAsync();
+        var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+
+        var events = await baseQuery
+            .Include(e => e.Participants).ThenInclude(p => p.User)
+            .Include(e => e.Category)
+            .OrderByDescending(e => e.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
-        return TypedResults.Ok(events);
+        var items = events.Select(e => new EventResponse(
+            e.Id,
+            e.Title,
+            e.Description,
+            e.OwnerUserId,
+            e.CreatedAt,
+            e.Category != null ? new CategoryResponse(e.Category.Id, e.Category.Name, e.Category.Icon) : null,
+            e.Participants.Select(p => new ParticipantResponse(
+                p.UserId,
+                p.User!.DisplayName,
+                p.User!.Email!,
+                p.Role,
+                p.JoinedAt)).ToList())).ToList();
+
+        var result = new PagedResult<EventResponse>(items, page, pageSize, total, totalPages);
+        return TypedResults.Ok(result);
     }
 
     // --- POST /api/events — create event, creator becomes Owner participant ---
@@ -75,6 +94,7 @@ public static class EventEndpoints
             Title = request.Title,
             Description = request.Description,
             OwnerUserId = userId,
+            CategoryId = request.CategoryId,
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -98,6 +118,7 @@ public static class EventEndpoints
             evt.Description,
             evt.OwnerUserId,
             evt.CreatedAt,
+            evt.Category != null ? new CategoryResponse(evt.Category.Id, evt.Category.Name, evt.Category.Icon) : null,
             [new ParticipantResponse(userId, user!.DisplayName, user!.Email!, ParticipantRole.Owner, evt.CreatedAt)]);
 
         return TypedResults.Created($"/api/events/{evt.Id}", response);
@@ -113,8 +134,8 @@ public static class EventEndpoints
         var userId = GetUserId(ctx);
 
         var evt = await db.Events
-            .Include(e => e.Participants)
-                .ThenInclude(p => p.User)
+            .Include(e => e.Participants).ThenInclude(p => p.User)
+            .Include(e => e.Category)
             .FirstOrDefaultAsync(e => e.Id == id);
 
         if (evt is null)
@@ -129,6 +150,7 @@ public static class EventEndpoints
             evt.Description,
             evt.OwnerUserId,
             evt.CreatedAt,
+            evt.Category != null ? new CategoryResponse(evt.Category.Id, evt.Category.Name, evt.Category.Icon) : null,
             evt.Participants.Select(p => new ParticipantResponse(
                 p.UserId,
                 p.User!.DisplayName,
@@ -150,8 +172,8 @@ public static class EventEndpoints
         var userId = GetUserId(ctx);
 
         var evt = await db.Events
-            .Include(e => e.Participants)
-                .ThenInclude(p => p.User)
+            .Include(e => e.Participants).ThenInclude(p => p.User)
+            .Include(e => e.Category)
             .FirstOrDefaultAsync(e => e.Id == id);
 
         if (evt is null)
@@ -162,6 +184,7 @@ public static class EventEndpoints
 
         evt.Title = request.Title;
         evt.Description = request.Description;
+        evt.CategoryId = request.CategoryId;
 
         await db.SaveChangesAsync();
 
@@ -171,6 +194,7 @@ public static class EventEndpoints
             evt.Description,
             evt.OwnerUserId,
             evt.CreatedAt,
+            evt.Category != null ? new CategoryResponse(evt.Category.Id, evt.Category.Name, evt.Category.Icon) : null,
             evt.Participants.Select(p => new ParticipantResponse(
                 p.UserId,
                 p.User!.DisplayName,
@@ -215,8 +239,8 @@ public static class EventEndpoints
         var userId = GetUserId(ctx);
 
         var evt = await db.Events
-            .Include(e => e.Participants)
-                .ThenInclude(p => p.User)
+            .Include(e => e.Participants).ThenInclude(p => p.User)
+            .Include(e => e.Category)
             .FirstOrDefaultAsync(e => e.Id == id);
 
         if (evt is null)
@@ -303,8 +327,8 @@ public static class EventEndpoints
         var userId = GetUserId(ctx);
 
         var evt = await db.Events
-            .Include(e => e.Participants)
-                .ThenInclude(p => p.User)
+            .Include(e => e.Participants).ThenInclude(p => p.User)
+            .Include(e => e.Category)
             .FirstOrDefaultAsync(e => e.Id == id);
 
         if (evt is null)
@@ -358,23 +382,33 @@ public static class EventEndpoints
         return TypedResults.Created($"/api/events/{evt.Id}/completions", response);
     }
 
-    // --- GET /api/events/{id}/completions — completion history (participants only) ---
+    // --- GET /api/events/{id}/completions — paginated completion history ---
 
-    private static async Task<Results<Ok<List<CompletionResponse>>, NotFound>> ListCompletions(
+    private static async Task<Results<Ok<PagedResult<CompletionResponse>>, NotFound>> ListCompletions(
         Guid id,
         ApplicationDbContext db,
-        HttpContext ctx)
+        HttpContext ctx,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
     {
         var userId = GetUserId(ctx);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
         // Verify the user is a participant
         var isParticipant = await db.EventParticipants.AnyAsync(p => p.EventId == id && p.UserId == userId);
         if (!isParticipant)
             return TypedResults.NotFound();
 
-        var completions = await db.EventCompletions
-            .Where(c => c.EventId == id)
+        var baseQuery = db.EventCompletions
+            .Where(c => c.EventId == id);
+
+        var total = await baseQuery.CountAsync();
+        var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+
+        var items = await baseQuery
             .OrderByDescending(c => c.CompletedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(c => new CompletionResponse(
                 c.Id,
                 c.CompletedByUserId,
@@ -383,7 +417,8 @@ public static class EventEndpoints
                 c.Note))
             .ToListAsync();
 
-        return TypedResults.Ok(completions);
+        var result = new PagedResult<CompletionResponse>(items, page, pageSize, total, totalPages);
+        return TypedResults.Ok(result);
     }
 
     // --- Helper: extract user ID from JWT claims ---

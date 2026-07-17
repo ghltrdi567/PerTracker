@@ -52,6 +52,7 @@ app.MapGet("/", () => "PerFunTracker API");
 app.MapAuthEndpoints();
 app.MapEventEndpoints();
 app.MapUserEndpoints();
+app.MapCategoryEndpoints();
 
 // Auto-apply migrations on startup
 using (var scope = app.Services.CreateScope())

@@ -16,6 +16,7 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
     public DbSet<EventParticipant> EventParticipants => Set<EventParticipant>();
     public DbSet<EventCompletion> EventCompletions => Set<EventCompletion>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Category> Categories => Set<Category>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -34,6 +35,21 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
                 .WithMany()
                 .HasForeignKey(x => x.OwnerUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.Category)
+                .WithMany()
+                .HasForeignKey(x => x.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Category
+        builder.Entity<Category>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).IsRequired().HasMaxLength(100);
+            e.Property(x => x.Icon).HasMaxLength(50);
+            e.Property(x => x.CreatedAt).IsRequired();
+            e.HasIndex(x => x.Name).IsUnique();
         });
 
         // EventParticipant — composite key (EventId, UserId)
