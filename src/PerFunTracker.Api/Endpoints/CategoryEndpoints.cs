@@ -56,8 +56,8 @@ public static class CategoryEndpoints
         ApplicationDbContext db,
         HttpContext ctx)
     {
-        // Check for duplicate name
-        if (await db.Categories.AnyAsync(c => c.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase)))
+        // Check for duplicate name (case-insensitive via PostgreSQL ILIKE)
+        if (await db.Categories.AnyAsync(c => EF.Functions.ILike(c.Name, request.Name)))
             return TypedResults.BadRequest(new ErrorResponse(["A category with this name already exists."]));
 
         var category = new Category

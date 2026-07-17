@@ -2,8 +2,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
   CircularProgress,
   Dialog,
@@ -320,25 +318,63 @@ export default function EventDetailPage() {
         </Button>
       </Box>
 
-      {/* История завершений */}
+      {/* История завершений — в виде чата */}
       <Typography variant="h6" gutterBottom>История завершений</Typography>
       {(completions?.items?.length ?? 0) > 0 ? (
-        <>
-          {completions!.items.map((c) => (
-            <Card key={c.id} sx={{ mb: 1 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Box>
-                    <Typography variant="subtitle2">{c.completedByName}</Typography>
-                    {c.note && <Typography variant="body2" color="text.secondary">{c.note}</Typography>}
-                  </Box>
+        <Box sx={{ mb: 2 }}>
+          {completions!.items.map((c) => {
+            const isOwn = c.completedByUserId === user?.userId;
+            return (
+              <Box
+                key={c.id}
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: isOwn ? 'flex-end' : 'flex-start',
+                  mb: 1.5,
+                }}
+              >
+                {/* Имя и время */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    flexDirection: isOwn ? 'row-reverse' : 'row',
+                    mb: 0.3,
+                  }}
+                >
+                  <Typography variant="caption" fontWeight={600}>
+                    {isOwn ? 'Вы' : c.completedByName}
+                  </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {formatDate(c.completedAt)}
                   </Typography>
                 </Box>
-              </CardContent>
-            </Card>
-          ))}
+                {/* Пузырёк сообщения */}
+                <Box
+                  sx={{
+                    maxWidth: '75%',
+                    px: 2,
+                    py: 1,
+                    borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    bgcolor: isOwn ? 'primary.main' : 'grey.200',
+                    color: isOwn ? 'primary.contrastText' : 'text.primary',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                    <Typography variant="body2">✅ Отметил(а) завершение</Typography>
+                  </Box>
+                  {c.note && (
+                    <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
+                      📝 {c.note}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            );
+          })}
           {(completions!.totalPages ?? 0) > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
               <Pagination
@@ -349,9 +385,9 @@ export default function EventDetailPage() {
               />
             </Box>
           )}
-        </>
+        </Box>
       ) : (
-        <Typography color="text.secondary">Завершений пока нет.</Typography>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>Завершений пока нет.</Typography>
       )}
 
       {/* Диалог редактирования */}
