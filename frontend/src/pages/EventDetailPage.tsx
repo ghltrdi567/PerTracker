@@ -37,7 +37,7 @@ import {
 import { getCategories } from '../api/categories';
 import type { Category, Completion, EventResponse, Participant } from '../types/api';
 import { ParticipantRole } from '../types/api';
-import { getApiErrors, formatDate } from '../utils/helpers';
+import { getApiErrors, formatDate, getDayLabel } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../context/AuthContext';
 
@@ -333,55 +333,84 @@ export default function EventDetailPage() {
       <Typography variant="h6" gutterBottom>История завершений</Typography>
       {completions.length > 0 ? (
         <Box sx={{ mb: 2 }}>
-          {completions.map((c) => {
+          {completions.map((c, idx) => {
             const isOwn = c.completedByUserId === user?.userId;
+            // Показываем разделитель дня, если день отличается от предыдущего
+            const prevDate = idx > 0 ? completions[idx - 1].completedAt : null;
+            const showDaySeparator = !prevDate || getDayLabel(c.completedAt) !== getDayLabel(prevDate);
             return (
-              <Box
-                key={c.id}
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: isOwn ? 'flex-end' : 'flex-start',
-                  mb: 1.5,
-                }}
-              >
-                {/* Имя и время */}
+              <Box key={c.id}>
+                {showDaySeparator && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      mb: 1.5,
+                      mt: idx > 0 ? 2 : 0,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'inline-block',
+                        px: 2,
+                        py: 0.5,
+                        borderRadius: 4,
+                        bgcolor: 'grey.300',
+                        color: 'text.secondary',
+                      }}
+                    >
+                      <Typography variant="caption" fontWeight={600}>
+                        {getDayLabel(c.completedAt)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
                 <Box
                   sx={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    flexDirection: isOwn ? 'row-reverse' : 'row',
-                    mb: 0.3,
+                    flexDirection: 'column',
+                    alignItems: isOwn ? 'flex-end' : 'flex-start',
+                    mb: 1.5,
                   }}
                 >
-                  <Typography variant="caption" fontWeight={600}>
-                    {isOwn ? 'Вы' : c.completedByName}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDate(c.completedAt)}
-                  </Typography>
-                </Box>
-                {/* Пузырёк сообщения */}
-                <Box
-                  sx={{
-                    maxWidth: '75%',
-                    px: 2,
-                    py: 1,
-                    borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                    bgcolor: isOwn ? 'primary.main' : 'grey.200',
-                    color: isOwn ? 'primary.contrastText' : 'text.primary',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                    <Typography variant="body2">✅ Отметил(а) завершение</Typography>
-                  </Box>
-                  {c.note && (
-                    <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
-                      📝 {c.note}
+                  {/* Имя и время */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      flexDirection: isOwn ? 'row-reverse' : 'row',
+                      mb: 0.3,
+                    }}
+                  >
+                    <Typography variant="caption" fontWeight={600}>
+                      {isOwn ? 'Вы' : c.completedByName}
                     </Typography>
-                  )}
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDate(c.completedAt)}
+                    </Typography>
+                  </Box>
+                  {/* Пузырёк сообщения */}
+                  <Box
+                    sx={{
+                      maxWidth: '75%',
+                      px: 2,
+                      py: 1,
+                      borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                      bgcolor: isOwn ? 'primary.main' : 'grey.200',
+                      color: isOwn ? 'primary.contrastText' : 'text.primary',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                      <Typography variant="body2">✅ Отметил(а) завершение</Typography>
+                    </Box>
+                    {c.note && (
+                      <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
+                        📝 {c.note}
+                      </Typography>
+                    )}
+                  </Box>
                 </Box>
               </Box>
             );
