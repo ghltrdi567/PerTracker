@@ -14,7 +14,6 @@ import {
   ListItem,
   ListItemText,
   MenuItem,
-  Pagination,
   TextField,
   Typography,
 } from '@mui/material';
@@ -36,7 +35,7 @@ import {
   getCompletions,
 } from '../api/events';
 import { getCategories } from '../api/categories';
-import type { Category, Completion, EventResponse, PagedResult, Participant } from '../types/api';
+import type { Category, Completion, EventResponse, Participant } from '../types/api';
 import { ParticipantRole } from '../types/api';
 import { getApiErrors, formatDate } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
@@ -52,8 +51,10 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
 
   // Завершения
-  const [completions, setCompletions] = useState<PagedResult<Completion> | null>(null);
+  const [completions, setCompletions] = useState<Completion[]>([]);
   const [compPage, setCompPage] = useState(1);
+  const [compHasMore, setCompHasMore] = useState(false);
+  const [compLoading, setCompLoading] = useState(false);
   const [compNote, setCompNote] = useState('');
   const [completing, setCompleting] = useState(false);
   const [compRefreshKey, setCompRefreshKey] = useState(0);
@@ -85,15 +86,25 @@ export default function EventDetailPage() {
     }
   };
 
-  const loadCompletions = async () => {
+  const loadCompletions = async (pageNum: number, append: boolean) => {
     if (!id) return;
+    if (append) setCompLoading(true);
     try {
-      const res = await getCompletions(id, compPage);
-      setCompletions(res);
+      const res = await getCompletions(id, pageNum);
+      const newItems = res?.items ?? [];
+      setCompletions(append ? (prev) => [...prev, ...newItems] : newItems);
+      setCompHasMore((res?.page ?? 1) < (res?.totalPages ?? 1));
+      setCompPage(pageNum);
     } catch (err) {
       toast.show(getApiErrors(err).join(' '), 'error');
+      if (!append) setCompletions([]);
+    } finally {
+      setCompLoading(false);
     }
   };
+
+  const handleLoadMoreCompletions = () => loadCompletions(compPage + 1, true);
+  void handleLoadMoreCompletions;
 
   useEffect(() => {
     loadEvent();
@@ -101,9 +112,9 @@ export default function EventDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    loadCompletions();
+    loadCompletions(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, compPage, compRefreshKey]);
+  }, [id, compRefreshKey]);
 
   if (loading || !event) {
     return (
@@ -320,9 +331,9 @@ export default function EventDetailPage() {
 
       {/* История завершений — в виде чата */}
       <Typography variant="h6" gutterBottom>История завершений</Typography>
-      {(completions?.items?.length ?? 0) > 0 ? (
+      {completions.length > 0 ? (
         <Box sx={{ mb: 2 }}>
-          {completions!.items.map((c) => {
+          {completions.map((c) => {
             const isOwn = c.completedByUserId === user?.userId;
             return (
               <Box
@@ -375,14 +386,16 @@ export default function EventDetailPage() {
               </Box>
             );
           })}
-          {(completions!.totalPages ?? 0) > 1 && (
+          {compHasMore && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-              <Pagination
-                count={completions!.totalPages}
-                page={compPage}
-                onChange={(_, p) => setCompPage(p)}
-                color="primary"
-              />
+              <Button
+                variant="outlined"
+                onClick={() => loadCompletions(compPage + 1, true)}
+                disabled={compLoading}
+                startIcon={compLoading ? <CircularProgress size={20} /> : undefined}
+              >
+                {compLoading ? 'Загрузка...' : 'Загрузить ещё'}
+              </Button>
             </Box>
           )}
         </Box>

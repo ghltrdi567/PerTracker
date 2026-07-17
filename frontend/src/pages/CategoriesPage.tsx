@@ -14,36 +14,46 @@ import type { Category } from '../types/api';
 import { getApiErrors } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 
+const PAGE_SIZE = 50;
+
 export default function CategoriesPage() {
   const toast = useToast();
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [items, setItems] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (pageNum: number, append: boolean) => {
+    if (append) setLoadingMore(true); else setLoading(true);
     try {
-      const res = await getCategories();
-      setCategories(res?.items ?? []);
+      const res = await getCategories(pageNum, PAGE_SIZE);
+      const newItems = res?.items ?? [];
+      setItems(append ? (prev) => [...prev, ...newItems] : newItems);
+      setHasMore((res?.page ?? 1) < (res?.totalPages ?? 1));
+      setPage(pageNum);
     } catch (err) {
       console.error('CategoriesPage: failed to load categories', err);
       const msg = getApiErrors(err).join(' ');
       toast.show(msg, 'error');
-      // При ошибке оставляем пустой массив, чтобы не было белого экрана
-      setCategories([]);
+      if (!append) setItems([]);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    load();
+    load(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleLoadMore = () => load(page + 1, true);
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -54,7 +64,7 @@ export default function CategoriesPage() {
       toast.show('Категория создана');
       setName('');
       setIcon('');
-      await load();
+      await load(1, false);
     } catch (err) {
       setErrors(getApiErrors(err));
     } finally {
@@ -102,17 +112,31 @@ export default function CategoriesPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress />
         </Box>
-      ) : categories.length > 0 ? (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2 }}>
-          {categories.map((cat) => (
-            <Card key={cat.id}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <Typography variant="h4">{cat.icon ?? '📁'}</Typography>
-                <Typography variant="body2">{cat.name}</Typography>
-              </CardContent>
-            </Card>
-          ))}
-        </Box>
+      ) : items.length > 0 ? (
+        <>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2 }}>
+            {items.map((cat) => (
+              <Card key={cat.id}>
+                <CardContent sx={{ textAlign: 'center' }}>
+                  <Typography variant="h4">{cat.icon ?? '📁'}</Typography>
+                  <Typography variant="body2">{cat.name}</Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+          {hasMore && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <Button
+                variant="outlined"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                startIcon={loadingMore ? <CircularProgress size={20} /> : undefined}
+              >
+                {loadingMore ? 'Загрузка...' : 'Загрузить ещё'}
+              </Button>
+            </Box>
+          )}
+        </>
       ) : (
         <Typography color="text.secondary">Категорий пока нет. Создайте первую!</Typography>
       )}

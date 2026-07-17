@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogTitle,
   MenuItem,
-  Pagination,
   TextField,
   Typography,
 } from '@mui/material';
@@ -20,20 +19,23 @@ import { Add as AddIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getEvents, createEvent } from '../api/events';
 import { getCategories } from '../api/categories';
-import type { Category, EventResponse, PagedResult } from '../types/api';
+import type { Category, EventResponse } from '../types/api';
 import { getApiErrors, formatDate } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
+
+const PAGE_SIZE = 20;
 
 export default function EventsPage() {
   const navigate = useNavigate();
   const toast = useToast();
-  const [data, setData] = useState<PagedResult<EventResponse> | null>(null);
-  const [page, setPage] = useState(1);
+  const [items, setItems] = useState<EventResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  // Ключ для принудительного обновления при каждом заходе на страницу
-  const [refreshKey, setRefreshKey] = useState(0);
 
   // Поля формы создания
   const [title, setTitle] = useState('');
@@ -42,27 +44,34 @@ export default function EventsPage() {
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const loadEvents = async () => {
-    setLoading(true);
+  const loadEvents = async (pageNum: number, append: boolean) => {
+    if (append) setLoadingMore(true); else setLoading(true);
     try {
-      const res = await getEvents(page);
-      setData(res);
+      const res = await getEvents(pageNum, PAGE_SIZE);
+      const newItems = res?.items ?? [];
+      setItems(append ? (prev) => [...prev, ...newItems] : newItems);
+      setHasMore((res?.page ?? 1) < (res?.totalPages ?? 1));
+      setPage(pageNum);
     } catch (err) {
       toast.show(getApiErrors(err).join(' '), 'error');
+      if (!append) setItems([]);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    loadEvents();
+    loadEvents(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, refreshKey]);
+  }, [refreshKey]);
 
   // Принудительное обновление при каждом заходе на страницу
   useEffect(() => {
     setRefreshKey((k) => k + 1);
   }, []);
+
+  const handleLoadMore = () => loadEvents(page + 1, true);
 
   const openCreate = async () => {
     setCreateOpen(true);
@@ -110,10 +119,10 @@ export default function EventsPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
-      ) : (data?.items?.length ?? 0) > 0 ? (
+      ) : items.length > 0 ? (
         <>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-            {data!.items.map((event) => (
+            {items.map((event) => (
               <Card key={event.id}>
                 <CardActionArea onClick={() => navigate(`/events/${event.id}`)}>
                   <CardContent>
@@ -142,14 +151,17 @@ export default function EventsPage() {
               </Card>
             ))}
           </Box>
-          {(data?.totalPages ?? 0) > 1 && (
+          {hasMore && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-              <Pagination
-                count={data!.totalPages}
-                page={page}
-                onChange={(_, p) => setPage(p)}
-                color="primary"
-              />
+              <Button
+                variant="outlined"
+                size="large"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                startIcon={loadingMore ? <CircularProgress size={20} /> : undefined}
+              >
+                {loadingMore ? 'Загрузка...' : 'Загрузить ещё'}
+              </Button>
             </Box>
           )}
         </>

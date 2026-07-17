@@ -19,7 +19,7 @@ export function getApiErrors(error: unknown): string[] {
   return ['Произошла ошибка. Попробуйте позже.'];
 }
 
-// Форматирует ISO-дату в читаемый вид.
+// Форматирует ISO-дату в читаемый вид с учётом часового пояса устройства.
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', {
     day: '2-digit',
@@ -27,5 +27,6 @@ export function formatDate(iso: string): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   });
 }
