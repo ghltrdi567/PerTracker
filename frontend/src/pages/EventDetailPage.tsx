@@ -113,7 +113,7 @@ export default function EventDetailPage() {
   }
 
   // Текущий пользователь — определяем по роли Owner: ownerUserId совпадает с participant.userId(role=0)
-  const currentParticipant = event.participants.find((p) => p.role === ParticipantRole.Owner);
+  const currentParticipant = event.participants?.find((p) => p.role === ParticipantRole.Owner);
   const isOwner = currentParticipant !== undefined;
 
   const openEdit = async () => {
@@ -123,7 +123,7 @@ export default function EventDetailPage() {
     setEditOpen(true);
     try {
       const res = await getCategories();
-      setCategories(res.items);
+      setCategories(res?.items ?? []);
     } catch {
       // ignore
     }
@@ -262,7 +262,7 @@ export default function EventDetailPage() {
         </Box>
       )}
       <List>
-        {event.participants.map((p) => (
+        {(event.participants ?? []).map((p) => (
           <ListItem
             key={p.userId}
             secondaryAction={
@@ -315,9 +315,9 @@ export default function EventDetailPage() {
 
       {/* История завершений */}
       <Typography variant="h6" gutterBottom>История завершений</Typography>
-      {completions && completions.items.length > 0 ? (
+      {(completions?.items?.length ?? 0) > 0 ? (
         <>
-          {completions.items.map((c) => (
+          {completions!.items.map((c) => (
             <Card key={c.id} sx={{ mb: 1 }}>
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -332,10 +332,10 @@ export default function EventDetailPage() {
               </CardContent>
             </Card>
           ))}
-          {completions.totalPages > 1 && (
+          {(completions!.totalPages ?? 0) > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
               <Pagination
-                count={completions.totalPages}
+                count={completions!.totalPages}
                 page={compPage}
                 onChange={(_, p) => setCompPage(p)}
                 color="primary"

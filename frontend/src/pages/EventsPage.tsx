@@ -61,7 +61,7 @@ export default function EventsPage() {
     setCreateOpen(true);
     try {
       const res = await getCategories();
-      setCategories(res.items);
+      setCategories(res?.items ?? []);
     } catch {
       // ignore
     }
@@ -103,10 +103,10 @@ export default function EventsPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
-      ) : data && data.items.length > 0 ? (
+      ) : (data?.items?.length ?? 0) > 0 ? (
         <>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-            {data.items.map((event) => (
+            {data!.items.map((event) => (
               <Card key={event.id}>
                 <CardActionArea onClick={() => navigate(`/events/${event.id}`)}>
                   <CardContent>
@@ -128,17 +128,17 @@ export default function EventsPage() {
                       </Typography>
                     )}
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      {event.participants.length} участн. · {formatDate(event.createdAt)}
+                      {event.participants?.length ?? 0} участн. · {formatDate(event.createdAt)}
                     </Typography>
                   </CardContent>
                 </CardActionArea>
               </Card>
             ))}
           </Box>
-          {data.totalPages > 1 && (
+          {(data?.totalPages ?? 0) > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
               <Pagination
-                count={data.totalPages}
+                count={data!.totalPages}
                 page={page}
                 onChange={(_, p) => setPage(p)}
                 color="primary"

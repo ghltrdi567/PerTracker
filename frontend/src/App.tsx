@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import ErrorBoundary from './components/ErrorBoundary';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './components/ToastProvider';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -24,9 +25,10 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <ToastProvider>
-        <AuthProvider>
-          <BrowserRouter>
+      <ErrorBoundary>
+        <ToastProvider>
+          <AuthProvider>
+            <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -43,6 +45,7 @@ export default function App() {
           </BrowserRouter>
         </AuthProvider>
       </ToastProvider>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }
