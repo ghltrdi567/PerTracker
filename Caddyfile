@@ -1,4 +1,5 @@
-# PerFunTracker API
+# PerFunTracker — Caddy проксирует всё на frontend (nginx),
+# который сам раздаёт статику и проксирует /api на бэкенд
 :8080 {
-    reverse_proxy api:8080
+    reverse_proxy frontend:80
 }
