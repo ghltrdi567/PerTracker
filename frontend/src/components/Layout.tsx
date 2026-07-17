@@ -1,10 +1,10 @@
-import { AppBar, Box, Button, Container, IconButton, Toolbar, Typography } from '@mui/material';
+import { AppBar, Avatar, Box, Button, Container, IconButton, Toolbar, Tooltip, Typography } from '@mui/material';
 import { Logout as LogoutIcon, Event as EventIcon, Category as CategoryIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Layout() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -42,6 +42,18 @@ export default function Layout() {
               </Button>
             ))}
           </Box>
+          {user && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+              <Tooltip title={user.email}>
+                <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 14 }}>
+                  {user.displayName.charAt(0).toUpperCase()}
+                </Avatar>
+              </Tooltip>
+              <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                {user.displayName}
+              </Typography>
+            </Box>
+          )}
           <IconButton color="inherit" onClick={handleLogout} title="Выйти">
             <LogoutIcon />
           </IconButton>

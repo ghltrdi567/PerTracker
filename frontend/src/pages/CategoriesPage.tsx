@@ -28,9 +28,13 @@ export default function CategoriesPage() {
     setLoading(true);
     try {
       const res = await getCategories();
-      setCategories(res.items);
+      setCategories(res?.items ?? []);
     } catch (err) {
-      toast.show(getApiErrors(err).join(' '), 'error');
+      console.error('CategoriesPage: failed to load categories', err);
+      const msg = getApiErrors(err).join(' ');
+      toast.show(msg, 'error');
+      // При ошибке оставляем пустой массив, чтобы не было белого экрана
+      setCategories([]);
     } finally {
       setLoading(false);
     }

@@ -32,6 +32,8 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  // Ключ для принудительного обновления при каждом заходе на страницу
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Поля формы создания
   const [title, setTitle] = useState('');
@@ -55,7 +57,12 @@ export default function EventsPage() {
   useEffect(() => {
     loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, refreshKey]);
+
+  // Принудительное обновление при каждом заходе на страницу
+  useEffect(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   const openCreate = async () => {
     setCreateOpen(true);

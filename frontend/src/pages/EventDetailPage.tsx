@@ -42,11 +42,13 @@ import type { Category, Completion, EventResponse, PagedResult, Participant } fr
 import { ParticipantRole } from '../types/api';
 import { getApiErrors, formatDate } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
+import { useAuth } from '../context/AuthContext';
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
 
   const [event, setEvent] = useState<EventResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,7 @@ export default function EventDetailPage() {
   const [compPage, setCompPage] = useState(1);
   const [compNote, setCompNote] = useState('');
   const [completing, setCompleting] = useState(false);
+  const [compRefreshKey, setCompRefreshKey] = useState(0);
 
   // Редактирование
   const [editOpen, setEditOpen] = useState(false);
@@ -102,7 +105,7 @@ export default function EventDetailPage() {
   useEffect(() => {
     loadCompletions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, compPage]);
+  }, [id, compPage, compRefreshKey]);
 
   if (loading || !event) {
     return (
@@ -112,9 +115,8 @@ export default function EventDetailPage() {
     );
   }
 
-  // Текущий пользователь — определяем по роли Owner: ownerUserId совпадает с participant.userId(role=0)
-  const currentParticipant = event.participants?.find((p) => p.role === ParticipantRole.Owner);
-  const isOwner = currentParticipant !== undefined;
+  // Проверяем, является ли текущий пользователь владельцем события
+  const isOwner = user?.userId === event.ownerUserId;
 
   const openEdit = async () => {
     setEditTitle(event.title);
@@ -180,7 +182,7 @@ export default function EventDetailPage() {
 
   const handleRemoveParticipant = async (participant: Participant) => {
     if (!id) return;
-    const isSelf = participant.role === ParticipantRole.Owner;
+    const isSelf = participant.userId === user?.userId;
     const msg = isSelf
       ? 'Выйти из события?'
       : `Удалить участника ${participant.displayName}?`;
@@ -206,7 +208,7 @@ export default function EventDetailPage() {
       await completeEvent(id, { note: compNote || null });
       toast.show('Завершение отмечено!');
       setCompNote('');
-      await loadCompletions();
+      setCompRefreshKey((k) => k + 1);
     } catch (err) {
       toast.show(getApiErrors(err).join(' '), 'error');
     } finally {
@@ -269,9 +271,14 @@ export default function EventDetailPage() {
               <IconButton
                 edge="end"
                 onClick={() => handleRemoveParticipant(p)}
-                color={p.role === ParticipantRole.Owner ? 'default' : 'error'}
-                disabled={p.role === ParticipantRole.Owner && !isOwner}
-                title={p.role === ParticipantRole.Owner ? 'Выйти' : 'Удалить'}
+                color="error"
+                disabled={
+                  // Владелец не может удалить сам себя
+                  (isOwner && p.userId === user?.userId) ||
+                  // Не-владелец может удалить только себя
+                  (!isOwner && p.userId !== user?.userId)
+                }
+                title={p.userId === user?.userId ? 'Выйти' : 'Удалить'}
               >
                 <DeleteIcon />
               </IconButton>
