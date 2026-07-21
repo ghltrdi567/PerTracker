@@ -30,8 +30,9 @@ PerTracker/
 │   ├── PerFunTracker.Infrastructure/# EF Core, DbContext, Identity, реализация сервисов
 │   └── PerFunTracker.Api/           # Minimal API endpoints, BackgroundServices, DTO
 ├── frontend/                        # React SPA (Vite)
-├── docker-compose.yml               # dev и prod профили
-├── Caddyfile                        # reverse proxy для prod
+├── docker-compose.yml               # dev-профиль (базовый)
+├── docker-compose.prod.yml          # prod override (env, TLS, без открытых портов)
+├── Caddyfile                        # reverse proxy для prod (auto-HTTPS)
 └── Dockerfile                       # multi-stage сборка API
 ```
 
@@ -70,10 +71,15 @@ curl http://localhost:5134/health
 ### Prod-профиль (с Caddy и TLS)
 
 ```bash
-docker compose --profile prod up -d --build
+cp .env.example .env   # заполните REAL значениями: домен, JWT-ключ, SMTP
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
 ```
 
-Caddy слушает порты 80/443 и проксирует трафик на `frontend:80` (nginx), который раздаёт статику SPA и проксирует `/api` и `/health` на бэкенд. Для автоматического HTTPS отредактируйте `Caddyfile`, указав домен вместо `:8080`.
+В prod-режиме:
+- `ASPNETCORE_ENVIRONMENT=Production` — refresh-cookie получает `Secure=true, SameSite=Strict`.
+- Порты API (5134) и frontend (3000) **не публикуются** наружу — единственная точка входа это Caddy.
+- Caddy слушает 80/443, автоматически выпускает сертификат Let's Encrypt для домена из `$DOMAIN` и проксирует трафик на `frontend:80` (nginx), который раздаёт статику SPA и проксирует `/api` на бэкенд.
+- Rate limiting (5 запросов/мин на IP) и lockout (5 неудачных попыток → блокировка 5 мин) защищают auth-эндпоинты.
 
 ### Переменные окружения
 
@@ -94,6 +100,20 @@ Caddy слушает порты 80/443 и проксирует трафик на
 | `Smtp__FromEmail` | Email отправителя | `noreply@perfuntracker.local` |
 | `Smtp__FromName` | Имя отправителя | `PerFunTracker` |
 | `ASPNETCORE_ENVIRONMENT` | Окружение | `Development` |
+
+Prod-переменные (из `.env`, используются через `docker-compose.prod.yml`):
+
+| Переменная | Описание |
+|-----------|----------|
+| `CONNECTION_STRING` | Строка подключения к PostgreSQL в prod |
+| `JWT_KEY` | Base64-ключ подписи JWT (min 256 бит) |
+| `DOMAIN` | Домен для Caddy (автоматический TLS) |
+| `SMTP_HOST` | SMTP-хост провайдера |
+| `SMTP_PORT` | SMTP-порт (587 для STARTTLS) |
+| `SMTP_USERNAME` | SMTP-логин |
+| `SMTP_PASSWORD` | SMTP-пароль |
+| `SMTP_FROM_EMAIL` | Email отправителя |
+| `SMTP_FROM_NAME` | Имя отправителя |
 
 > ⚠️ **Безопасность:** в prod обязательно замените `Jwt__Key` и пароль PostgreSQL на собственные значения.
 

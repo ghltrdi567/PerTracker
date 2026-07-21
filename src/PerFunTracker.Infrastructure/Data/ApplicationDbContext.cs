@@ -57,6 +57,9 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
         {
             e.HasKey(x => new { x.EventId, x.UserId });
 
+            // Index for "find events where user is participant" queries
+            e.HasIndex(x => x.UserId);
+
             e.HasOne(x => x.Event)
                 .WithMany(ev => ev.Participants)
                 .HasForeignKey(x => x.EventId)

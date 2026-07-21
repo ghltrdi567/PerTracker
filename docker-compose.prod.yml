@@ -1,0 +1,31 @@
+# PerFunTracker — production override for docker-compose.yml
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
+#
+# Перед запуском скопируйте .env.example → .env и заполните REAL значениями.
+
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Читаются из .env файла:
+      ConnectionStrings__DefaultConnection: "${CONNECTION_STRING:?Connection string required}"
+      Jwt__Key: "${JWT_KEY:?JWT signing key required}"
+      Smtp__Host: "${SMTP_HOST:?SMTP host required}"
+      Smtp__Port: "${SMTP_PORT:-587}"
+      Smtp__Username: "${SMTP_USERNAME:?SMTP username required}"
+      Smtp__Password: "${SMTP_PASSWORD:?SMTP password required}"
+      Smtp__FromEmail: "${SMTP_FROM_EMAIL:-noreply@perfuntracker.com}"
+      Smtp__FromName: "${SMTP_FROM_NAME:-PerFunTracker}"
+    # В prod порты наружу не публикуем — только Caddy — единственная точка входа.
+    ports: !reset []
+
+  frontend:
+    # В prod порты наружу не публикуем — только Caddy.
+    ports: !reset []
+
+  caddy:
+    # Автоматический TLS через Let's Encrypt
+    environment:
+      DOMAIN: "${DOMAIN:?Domain required for Caddy TLS}"

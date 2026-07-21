@@ -30,9 +30,18 @@ public static class DependencyInjection
         services.AddIdentityCore<AppUser>(options =>
         {
             options.SignIn.RequireConfirmedEmail = true;
+
+            // Lockout protection
+            options.Lockout.AllowedForNewUsers = true;
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
         })
             .AddEntityFrameworkStores<ApplicationDbContext>()
-            .AddDefaultTokenProviders();
+            .AddDefaultTokenProviders()
+            .AddSignInManager<SignInManager<AppUser>>();
+
+        // Required by SignInManager
+        services.AddHttpContextAccessor();
 
         // Options
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));

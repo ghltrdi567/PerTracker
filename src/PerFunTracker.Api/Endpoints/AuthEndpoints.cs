@@ -23,7 +23,7 @@ public static class AuthEndpoints
 
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth");
+        var group = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 
         group.MapPost("/register", Register);
         group.MapGet("/confirm-email", ConfirmEmail);
@@ -90,13 +90,19 @@ public static class AuthEndpoints
     private static async Task<Results<Ok<TokenResponse>, BadRequest<ErrorResponse>, UnauthorizedHttpResult>> Login(
         LoginRequest request,
         UserManager<AppUser> userManager,
+        SignInManager<AppUser> signInManager,
         IJwtTokenService jwtTokenService,
         ApplicationDbContext db,
         IOptions<JwtOptions> jwtOptions,
         HttpContext ctx)
     {
         var user = await userManager.FindByEmailAsync(request.Email);
-        if (user is null || !await userManager.CheckPasswordAsync(user, request.Password))
+        if (user is null)
+            return TypedResults.Unauthorized();
+
+        // CheckPasswordSignInAsync enforces lockout (Counts failed attempts, respects MaxFailedAccessAttempts)
+        var signInResult = await signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
+        if (!signInResult.Succeeded)
             return TypedResults.Unauthorized();
 
         if (!await userManager.IsEmailConfirmedAsync(user))
@@ -105,7 +111,7 @@ public static class AuthEndpoints
         var accessToken = jwtTokenService.GenerateAccessToken(user.Id, user.Email!, user.DisplayName);
         var refreshToken = await IssueRefreshToken(user.Id, jwtTokenService, db, jwtOptions.Value);
 
-        SetRefreshCookie(ctx, refreshToken);
+        SetRefreshCookie(ctx, refreshToken, jwtOptions.Value.RefreshTokenDays);
 
         return TypedResults.Ok(new TokenResponse(accessToken, jwtOptions.Value.AccessTokenMinutes * 60));
     }
@@ -134,7 +140,7 @@ public static class AuthEndpoints
             return TypedResults.Unauthorized();
 
         var newRefresh = await IssueRefreshToken(user.Id, jwtTokenService, db, jwtOptions.Value, stored.Id);
-        SetRefreshCookie(ctx, newRefresh);
+        SetRefreshCookie(ctx, newRefresh, jwtOptions.Value.RefreshTokenDays);
 
         var accessToken = jwtTokenService.GenerateAccessToken(user.Id, user.Email!, user.DisplayName);
         return TypedResults.Ok(new TokenResponse(accessToken, jwtOptions.Value.AccessTokenMinutes * 60));
@@ -181,7 +187,7 @@ public static class AuthEndpoints
         return token;
     }
 
-    private static void SetRefreshCookie(HttpContext ctx, string token)
+    private static void SetRefreshCookie(HttpContext ctx, string token, int refreshTokenDays)
     {
         var isDev = ctx.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
 
@@ -191,7 +197,7 @@ public static class AuthEndpoints
             Secure = !isDev,
             SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.Strict,
             Path = "/api/auth",
-            Expires = DateTimeOffset.UtcNow.AddDays(7),
+            Expires = DateTimeOffset.UtcNow.AddDays(refreshTokenDays),
         });
     }
 }

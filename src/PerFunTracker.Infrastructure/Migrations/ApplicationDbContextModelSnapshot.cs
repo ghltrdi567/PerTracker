@@ -251,7 +251,7 @@ namespace PerFunTracker.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Categories");
+                    b.ToTable("Categories", (string)null);
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.EventCompletion", b =>
@@ -280,7 +280,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("EventId");
 
-                    b.ToTable("EventCompletions");
+                    b.ToTable("EventCompletions", (string)null);
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.EventParticipant", b =>
@@ -301,7 +301,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("EventParticipants");
+                    b.ToTable("EventParticipants", (string)null);
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.RefreshToken", b =>
@@ -337,7 +337,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("RefreshTokens", (string)null);
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.TrackerEvent", b =>
@@ -371,7 +371,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("OwnerUserId");
 
-                    b.ToTable("Events");
+                    b.ToTable("Events", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

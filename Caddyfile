@@ -1,5 +1,8 @@
 # PerFunTracker — Caddy проксирует всё на frontend (nginx),
-# который сам раздаёт статику и проксирует /api на бэкенд
-:8080 {
+# который сам раздаёт статику и проксирует /api на бэкенд.
+#
+# Домен берётся из переменной окружения DOMAIN (см. docker-compose.prod.yml).
+# Caddy автоматически выпускает сертификат Let's Encrypt и редиректит HTTP → HTTPS.
+{$DOMAIN} {
     reverse_proxy frontend:80
 }

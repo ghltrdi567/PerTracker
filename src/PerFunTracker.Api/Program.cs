@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using PerFunTracker.Api.BackgroundServices;
@@ -7,6 +8,7 @@ using PerFunTracker.Api.Endpoints;
 using PerFunTracker.Core.Options;
 using PerFunTracker.Infrastructure;
 using PerFunTracker.Infrastructure.Data;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,11 +40,27 @@ builder.Services.AddCors(options =>
               .WithOrigins("http://localhost:5173", "http://localhost:3000"));
 });
 
+// Rate limiting: strict fixed-window limiter on auth endpoints (brute-force protection)
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 0;
+    });
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 builder.Services.AddHealthChecks();
 builder.Services.AddHostedService<EmailNotificationWorker>();
+builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
 
+app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
