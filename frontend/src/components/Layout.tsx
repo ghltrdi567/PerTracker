@@ -23,6 +23,7 @@ import {
   Event as EventIcon,
   Category as CategoryIcon,
   Settings as SettingsIcon,
+  AdminPanelSettings,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -39,6 +40,9 @@ export default function Layout() {
     { label: 'События', path: '/events', icon: <EventIcon /> },
     { label: 'Категории', path: '/categories', icon: <CategoryIcon /> },
     { label: 'Настройки', path: '/settings', icon: <SettingsIcon /> },
+    ...(user?.isAdmin
+      ? [{ label: 'Админ-панель', path: '/admin', icon: <AdminPanelSettings /> }]
+      : []),
   ];
 
   const handleLogout = async () => {

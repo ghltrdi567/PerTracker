@@ -12,6 +12,7 @@ import EventsPage from './pages/EventsPage';
 import EventDetailPage from './pages/EventDetailPage';
 import CategoriesPage from './pages/CategoriesPage';
 import SettingsPage from './pages/SettingsPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 const theme = createTheme({
   palette: {
@@ -40,6 +41,7 @@ export default function App() {
                   <Route path="/events/:id" element={<EventDetailPage />} />
                   <Route path="/categories" element={<CategoriesPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/admin" element={<AdminDashboardPage />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/events" replace />} />

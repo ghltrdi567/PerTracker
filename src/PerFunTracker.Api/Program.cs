@@ -74,6 +74,7 @@ app.MapAuthEndpoints();
 app.MapEventEndpoints();
 app.MapUserEndpoints();
 app.MapCategoryEndpoints();
+app.MapAdminEndpoints();
 
 // Auto-apply migrations on startup
 using (var scope = app.Services.CreateScope())

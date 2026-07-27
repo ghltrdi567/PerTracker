@@ -38,14 +38,19 @@ public static class AuthEndpoints
     private static async Task<Results<Created, BadRequest<ErrorResponse>>> Register(
         RegisterRequest request,
         UserManager<AppUser> userManager,
+        ApplicationDbContext db,
         IEmailSender emailSender,
         HttpContext ctx)
     {
+        // Первый зарегистрированный пользователь становится админом
+        var isFirstUser = !await db.Users.AnyAsync();
+
         var user = new AppUser
         {
             UserName = request.Email,
             Email = request.Email,
             DisplayName = request.DisplayName,
+            IsAdmin = isFirstUser,
             CreatedAt = DateTime.UtcNow,
         };
 
