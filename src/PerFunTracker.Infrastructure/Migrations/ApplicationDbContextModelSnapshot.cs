@@ -180,6 +180,9 @@ namespace PerFunTracker.Infrastructure.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsAdmin")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
@@ -251,7 +254,7 @@ namespace PerFunTracker.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.EventCompletion", b =>
@@ -280,7 +283,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("EventId");
 
-                    b.ToTable("EventCompletions", (string)null);
+                    b.ToTable("EventCompletions");
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.EventParticipant", b =>
@@ -301,7 +304,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("EventParticipants", (string)null);
+                    b.ToTable("EventParticipants");
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.RefreshToken", b =>
@@ -337,7 +340,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens", (string)null);
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("PerFunTracker.Core.Entities.TrackerEvent", b =>
@@ -371,7 +374,7 @@ namespace PerFunTracker.Infrastructure.Migrations
 
                     b.HasIndex("OwnerUserId");
 
-                    b.ToTable("Events", (string)null);
+                    b.ToTable("Events");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

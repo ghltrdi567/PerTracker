@@ -12,3 +12,7 @@ export async function createCategory(data: CreateCategoryRequest) {
   const res = await api.post<Category>('/api/categories', data);
   return res.data;
 }
+
+export async function deleteCategory(id: string) {
+  await api.delete(`/api/categories/${id}`);
+}

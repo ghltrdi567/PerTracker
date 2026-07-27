@@ -28,7 +28,7 @@ services:
       Smtp__Host: mailhog
       Smtp__Port: "1025"
     ports:
-      - "127.0.0.1:5134:8080"
+      - "5134:8080"
 
   frontend:
     build:
@@ -37,7 +37,7 @@ services:
     depends_on:
       - api
     ports:
-      - "127.0.0.1:3000:80"
+      - "3000:80"
 
   mailhog:
     image: mailhog/mailhog:latest

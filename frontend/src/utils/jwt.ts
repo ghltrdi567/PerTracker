@@ -5,7 +5,8 @@ interface JwtPayload {
   sub: string;
   email: string;
   display_name: string;
-  [key: string]: string;
+  is_admin?: string;
+  [key: string]: string | undefined;
 }
 
 export function decodeJwt(token: string): JwtPayload | null {
@@ -29,6 +30,7 @@ export interface UserInfo {
   userId: string;
   email: string;
   displayName: string;
+  isAdmin: boolean;
 }
 
 export function extractUserInfo(token: string): UserInfo | null {
@@ -38,5 +40,6 @@ export function extractUserInfo(token: string): UserInfo | null {
     userId: payload.sub,
     email: payload.email,
     displayName: payload.display_name,
+    isAdmin: payload.is_admin === 'true',
   };
 }

@@ -6,6 +6,9 @@ public record RegisterRequest(string Email, string Password, string DisplayName)
 /// <summary>Request body for POST /api/auth/login</summary>
 public record LoginRequest(string Email, string Password);
 
+/// <summary>Request body for POST /api/auth/make-admin (admin only)</summary>
+public record MakeAdminRequest(string Email);
+
 /// <summary>Response body for login and refresh — access token + expiry.</summary>
 public record TokenResponse(string AccessToken, int ExpiresIn);
 

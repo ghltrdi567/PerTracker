@@ -6,7 +6,7 @@ namespace PerFunTracker.Core.Services;
 public interface IJwtTokenService
 {
     /// <summary>Generates a short-lived JWT access token for the user.</summary>
-    string GenerateAccessToken(string userId, string email, string displayName);
+    string GenerateAccessToken(string userId, string email, string displayName, bool isAdmin = false);
 
     /// <summary>Generates a random opaque refresh token value.</summary>
     string GenerateRefreshToken();

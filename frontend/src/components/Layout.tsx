@@ -133,6 +133,11 @@ export default function Layout() {
               </Tooltip>
               <Typography variant="body2" sx={{ display: { xs: 'none', md: 'block' } }}>
                 {user.displayName}
+                {user.isAdmin && (
+                  <Typography component="span" variant="caption" sx={{ ml: 1, color: 'primary.light' }}>
+                    [ADMIN]
+                  </Typography>
+                )}
               </Typography>
             </Box>
           )}

@@ -20,18 +20,23 @@ public class JwtTokenService : IJwtTokenService
         _options = options.Value;
     }
 
-    public string GenerateAccessToken(string userId, string email, string displayName)
+    public string GenerateAccessToken(string userId, string email, string displayName, bool isAdmin = false)
     {
         var key = new SymmetricSecurityKey(Convert.FromBase64String(_options.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, userId),
-            new Claim(JwtRegisteredClaimNames.Email, email),
-            new Claim("display_name", displayName),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Sub, userId),
+            new(JwtRegisteredClaimNames.Email, email),
+            new("display_name", displayName),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
+
+        if (isAdmin)
+        {
+            claims.Add(new Claim("is_admin", "true"));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _options.Issuer,

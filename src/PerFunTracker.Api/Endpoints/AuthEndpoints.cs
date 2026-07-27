@@ -30,6 +30,7 @@ public static class AuthEndpoints
         group.MapPost("/login", Login);
         group.MapPost("/refresh", Refresh);
         group.MapPost("/logout", Logout);
+        group.MapPost("/make-admin", MakeAdmin).RequireAuthorization("Admin");
 
         return app;
     }
@@ -57,7 +58,8 @@ public static class AuthEndpoints
 
         var scheme = ctx.Request.Scheme;
         var host = ctx.Request.Host;
-        var confirmUrl = $"{scheme}://{host}/api/auth/confirm-email?userId={user.Id}&token={tokenEncoded}";
+        // Ссылка ведёт на фронтенд, который вызовет API и покажет результат
+        var confirmUrl = $"{scheme}://{host}/confirm-email?userId={user.Id}&token={tokenEncoded}";
 
         var html = $"""
             <h2>Welcome to PerFunTracker!</h2>
@@ -108,7 +110,7 @@ public static class AuthEndpoints
         if (!await userManager.IsEmailConfirmedAsync(user))
             return TypedResults.BadRequest(new ErrorResponse(["Email not confirmed."]));
 
-        var accessToken = jwtTokenService.GenerateAccessToken(user.Id, user.Email!, user.DisplayName);
+        var accessToken = jwtTokenService.GenerateAccessToken(user.Id, user.Email!, user.DisplayName, user.IsAdmin);
         var refreshToken = await IssueRefreshToken(user.Id, jwtTokenService, db, jwtOptions.Value);
 
         SetRefreshCookie(ctx, refreshToken, jwtOptions.Value.RefreshTokenDays);
@@ -142,7 +144,7 @@ public static class AuthEndpoints
         var newRefresh = await IssueRefreshToken(user.Id, jwtTokenService, db, jwtOptions.Value, stored.Id);
         SetRefreshCookie(ctx, newRefresh, jwtOptions.Value.RefreshTokenDays);
 
-        var accessToken = jwtTokenService.GenerateAccessToken(user.Id, user.Email!, user.DisplayName);
+        var accessToken = jwtTokenService.GenerateAccessToken(user.Id, user.Email!, user.DisplayName, user.IsAdmin);
         return TypedResults.Ok(new TokenResponse(accessToken, jwtOptions.Value.AccessTokenMinutes * 60));
     }
 
@@ -161,6 +163,27 @@ public static class AuthEndpoints
         }
 
         ctx.Response.Cookies.Delete(RefreshCookieName);
+        return TypedResults.Ok();
+    }
+
+    // --- POST /api/auth/make-admin — promote a user to admin (admin only) ---
+
+    private static async Task<Results<Ok, NotFound, BadRequest<ErrorResponse>>> MakeAdmin(
+        MakeAdminRequest request,
+        UserManager<AppUser> userManager)
+    {
+        var user = await userManager.FindByEmailAsync(request.Email);
+        if (user is null)
+            return TypedResults.NotFound();
+
+        if (user.IsAdmin)
+            return TypedResults.BadRequest(new ErrorResponse(["User is already an admin."]));
+
+        user.IsAdmin = true;
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return TypedResults.BadRequest(new ErrorResponse(result.Errors.Select(e => e.Description).ToArray()));
+
         return TypedResults.Ok();
     }
 

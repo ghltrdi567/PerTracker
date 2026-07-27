@@ -13,6 +13,9 @@ public class AppUser : IdentityUser
     /// <summary>Whether the user wants email notifications when an event is marked complete.</summary>
     public bool NotifyByEmailOnCompletion { get; set; } = true;
 
+    /// <summary>Whether the user has admin privileges (e.g. category management).</summary>
+    public bool IsAdmin { get; set; } = false;
+
     /// <summary>When the user account was created.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

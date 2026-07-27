@@ -10,7 +10,8 @@ using PerFunTracker.Infrastructure.Data;
 namespace PerFunTracker.Api.Endpoints;
 
 /// <summary>
-/// Category management endpoints. Categories are user-created and can be added over time.
+/// Category management endpoints.
+/// All authenticated users can list categories; only admins can create/delete.
 /// </summary>
 public static class CategoryEndpoints
 {
@@ -19,12 +20,13 @@ public static class CategoryEndpoints
         var group = app.MapGroup("/api/categories").RequireAuthorization();
 
         group.MapGet("/", ListCategories);
-        group.MapPost("/", CreateCategory);
+        group.MapPost("/", CreateCategory).RequireAuthorization("Admin");
+        group.MapDelete("/{id:guid}", DeleteCategory).RequireAuthorization("Admin");
 
         return app;
     }
 
-    // --- GET /api/categories — list all user categories (paginated) ---
+    // --- GET /api/categories — list all categories (paginated, available to all users) ---
 
     private static async Task<Ok<PagedResult<CategoryResponse>>> ListCategories(
         ApplicationDbContext db,
@@ -49,7 +51,7 @@ public static class CategoryEndpoints
         return TypedResults.Ok(result);
     }
 
-    // --- POST /api/categories — create a new category ---
+    // --- POST /api/categories — create a new category (admin only) ---
 
     private static async Task<Results<Created<CategoryResponse>, BadRequest<ErrorResponse>>> CreateCategory(
         CreateCategoryRequest request,
@@ -72,5 +74,21 @@ public static class CategoryEndpoints
 
         var response = new CategoryResponse(category.Id, category.Name, category.Icon);
         return TypedResults.Created($"/api/categories/{category.Id}", response);
+    }
+
+    // --- DELETE /api/categories/{id} — delete a category (admin only) ---
+
+    private static async Task<Results<NoContent, NotFound>> DeleteCategory(
+        Guid id,
+        ApplicationDbContext db)
+    {
+        var category = await db.Categories.FindAsync(id);
+        if (category is null)
+            return TypedResults.NotFound();
+
+        db.Categories.Remove(category);
+        await db.SaveChangesAsync();
+
+        return TypedResults.NoContent();
     }
 }

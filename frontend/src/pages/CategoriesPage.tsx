@@ -5,11 +5,14 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  IconButton,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
-import { getCategories, createCategory } from '../api/categories';
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { getCategories, createCategory, deleteCategory } from '../api/categories';
+import { useAuth } from '../context/AuthContext';
 import type { Category } from '../types/api';
 import { getApiErrors } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
@@ -18,6 +21,8 @@ const PAGE_SIZE = 50;
 
 export default function CategoriesPage() {
   const toast = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.isAdmin ?? false;
   const [items, setItems] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -72,41 +77,53 @@ export default function CategoriesPage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteCategory(id);
+      toast.show('Категория удалена');
+      setItems((prev) => prev.filter((c) => c.id !== id));
+    } catch (err) {
+      toast.show(getApiErrors(err).join(' '), 'error');
+    }
+  };
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>Категории</Typography>
 
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>Создать категорию</Typography>
-          <Box component="form" onSubmit={handleCreate} sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <TextField
-              label="Название"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              inputProps={{ maxLength: 100 }}
-              size="small"
-            />
-            <TextField
-              label="Иконка (эмодзи)"
-              value={icon}
-              onChange={(e) => setIcon(e.target.value)}
-              inputProps={{ maxLength: 50 }}
-              size="small"
-              sx={{ width: 120 }}
-            />
-            <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={saving}>
-              {saving ? '...' : 'Добавить'}
-            </Button>
-            {errors.length > 0 && (
-              <Typography color="error" variant="body2" sx={{ width: '100%' }}>
-                {errors.join(' ')}
-              </Typography>
-            )}
-          </Box>
-        </CardContent>
-      </Card>
+      {isAdmin && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Создать категорию</Typography>
+            <Box component="form" onSubmit={handleCreate} sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <TextField
+                label="Название"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                inputProps={{ maxLength: 100 }}
+                size="small"
+              />
+              <TextField
+                label="Иконка (эмодзи)"
+                value={icon}
+                onChange={(e) => setIcon(e.target.value)}
+                inputProps={{ maxLength: 50 }}
+                size="small"
+                sx={{ width: 120 }}
+              />
+              <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={saving}>
+                {saving ? '...' : 'Добавить'}
+              </Button>
+              {errors.length > 0 && (
+                <Typography color="error" variant="body2" sx={{ width: '100%' }}>
+                  {errors.join(' ')}
+                </Typography>
+              )}
+            </Box>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -117,7 +134,18 @@ export default function CategoriesPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2 }}>
             {items.map((cat) => (
               <Card key={cat.id}>
-                <CardContent sx={{ textAlign: 'center' }}>
+                <CardContent sx={{ textAlign: 'center', position: 'relative' }}>
+                  {isAdmin && (
+                    <Tooltip title="Удалить категорию">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(cat.id)}
+                        sx={{ position: 'absolute', top: 4, right: 4 }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Typography variant="h4">{cat.icon ?? '📁'}</Typography>
                   <Typography variant="body2">{cat.name}</Typography>
                 </CardContent>
@@ -138,7 +166,9 @@ export default function CategoriesPage() {
           )}
         </>
       ) : (
-        <Typography color="text.secondary">Категорий пока нет. Создайте первую!</Typography>
+        <Typography color="text.secondary">
+          {isAdmin ? 'Категорий пока нет. Создайте первую!' : 'Категорий пока нет.'}
+        </Typography>
       )}
     </Box>
   );
