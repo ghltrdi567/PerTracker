@@ -18,20 +18,24 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  Add as AddIcon,
   Delete as DeleteIcon,
   Person as PersonIcon,
   Event as EventIcon,
   Search as SearchIcon,
   Visibility as ViewIcon,
   Security as AdminIcon,
+  Category as CategoryIcon,
 } from '@mui/icons-material';
 import { getAdminUsers, deleteAdminUser, getAdminEvents, deleteAdminEvent } from '../api/admin';
 import type { AdminUser, AdminEvent } from '../api/admin';
+import { getCategories, createCategory, deleteCategory } from '../api/categories';
+import type { Category } from '../types/api';
 import { getApiErrors, formatDate } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 import { useNavigate } from 'react-router-dom';
 
-type TabValue = 'users' | 'events';
+type TabValue = 'users' | 'events' | 'categories';
 
 const PAGE_SIZE = 20;
 
@@ -55,19 +59,27 @@ export default function AdminDashboardPage() {
   const [eventsPage, setEventsPage] = useState(1);
   const [eventsTotal, setEventsTotal] = useState(0);
 
+  // Categories state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [catName, setCatName] = useState('');
+  const [catIcon, setCatIcon] = useState('');
+  const [catSaving, setCatSaving] = useState(false);
+
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{
-    type: 'user' | 'event';
+    type: 'user' | 'event' | 'category';
     id: string;
     label: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Load users
-  const loadUsers = async (page: number, append = false) => {
+  // Load users — searchOverride fixes the stale-closure bug on first search
+  const loadUsers = async (page: number, append = false, searchOverride?: string) => {
+    const search = searchOverride ?? searchQuery;
     if (!append) setUsersLoading(true);
     try {
-      const res = await getAdminUsers(page, PAGE_SIZE, searchQuery || undefined);
+      const res = await getAdminUsers(page, PAGE_SIZE, search || undefined);
       if (append) {
         setUsers((prev) => [...prev, ...res.items]);
       } else {
@@ -101,16 +113,53 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Load categories
+  const loadCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      const res = await getCategories(1, 100);
+      setCategories(res?.items ?? []);
+    } catch (err) {
+      toast.show(getApiErrors(err).join(' '), 'error');
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'users') loadUsers(1);
-    else loadEvents(1);
+    else if (tab === 'events') loadEvents(1);
+    else loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  // FIX: pass searchInput directly as searchOverride — setState is async
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     setSearchQuery(searchInput);
-    loadUsers(1);
+    loadUsers(1, false, searchInput);
+  };
+
+  const handleResetSearch = () => {
+    setSearchQuery('');
+    setSearchInput('');
+    loadUsers(1, false, '');
+  };
+
+  const handleCreateCategory = async (e: FormEvent) => {
+    e.preventDefault();
+    setCatSaving(true);
+    try {
+      await createCategory({ name: catName, icon: catIcon || null });
+      toast.show('Категория создана');
+      setCatName('');
+      setCatIcon('');
+      await loadCategories();
+    } catch (err) {
+      toast.show(getApiErrors(err).join(' '), 'error');
+    } finally {
+      setCatSaving(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -121,10 +170,14 @@ export default function AdminDashboardPage() {
         await deleteAdminUser(deleteDialog.id);
         toast.show(`Пользователь "${deleteDialog.label}" удалён`);
         setUsers((prev) => prev.filter((u) => u.id !== deleteDialog.id));
-      } else {
+      } else if (deleteDialog.type === 'event') {
         await deleteAdminEvent(deleteDialog.id);
         toast.show(`Событие "${deleteDialog.label}" удалено`);
         setEvents((prev) => prev.filter((e) => e.id !== deleteDialog.id));
+      } else {
+        await deleteCategory(deleteDialog.id);
+        toast.show(`Категория "${deleteDialog.label}" удалена`);
+        setCategories((prev) => prev.filter((c) => c.id !== deleteDialog.id));
       }
     } catch (err) {
       toast.show(getApiErrors(err).join(' '), 'error');
@@ -147,6 +200,7 @@ export default function AdminDashboardPage() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
         <Tab value="users" label={`Пользователи (${usersTotal})`} icon={<PersonIcon />} iconPosition="start" />
         <Tab value="events" label={`События (${eventsTotal})`} icon={<EventIcon />} iconPosition="start" />
+        <Tab value="categories" label="Категории" icon={<CategoryIcon />} iconPosition="start" />
       </Tabs>
 
       {/* Users tab */}
@@ -164,14 +218,7 @@ export default function AdminDashboardPage() {
               Поиск
             </Button>
             {searchQuery && (
-              <Button
-                variant="text"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSearchInput('');
-                  loadUsers(1);
-                }}
-              >
+              <Button variant="text" onClick={handleResetSearch}>
                 Сбросить
               </Button>
             )}
@@ -292,6 +339,66 @@ export default function AdminDashboardPage() {
         </>
       )}
 
+      {/* Categories tab */}
+      {tab === 'categories' && (
+        <>
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Создать категорию</Typography>
+              <Box component="form" onSubmit={handleCreateCategory} sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <TextField
+                  label="Название"
+                  required
+                  value={catName}
+                  onChange={(e) => setCatName(e.target.value)}
+                  inputProps={{ maxLength: 100 }}
+                  size="small"
+                />
+                <TextField
+                  label="Иконка (эмодзи)"
+                  value={catIcon}
+                  onChange={(e) => setCatIcon(e.target.value)}
+                  inputProps={{ maxLength: 50 }}
+                  size="small"
+                  sx={{ width: 120 }}
+                />
+                <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={catSaving}>
+                  {catSaving ? '...' : 'Добавить'}
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+
+          {categoriesLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : categories.length > 0 ? (
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2 }}>
+              {categories.map((cat) => (
+                <Card key={cat.id}>
+                  <CardContent sx={{ textAlign: 'center', position: 'relative' }}>
+                    <Tooltip title="Удалить категорию">
+                      <IconButton
+                        size="small"
+                        onClick={() => setDeleteDialog({ type: 'category', id: cat.id, label: cat.name })}
+                        sx={{ position: 'absolute', top: 4, right: 4 }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Typography variant="h4">{cat.icon ?? '📁'}</Typography>
+                    <Typography variant="body2">{cat.name}</Typography>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          ) : (
+            <Typography color="text.secondary">Категорий пока нет. Создайте первую!</Typography>
+          )}
+        </>
+      )}
+
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteDialog} onClose={() => !deleting && setDeleteDialog(null)}>
         <DialogTitle>Подтверждение удаления</DialogTitle>
@@ -299,7 +406,9 @@ export default function AdminDashboardPage() {
           <DialogContentText>
             {deleteDialog?.type === 'user'
               ? `Вы уверены, что хотите удалить пользователя "${deleteDialog?.label}"? Все его события и данные будут безвозвратно удалены.`
-              : `Вы уверены, что хотите удалить событие "${deleteDialog?.label}"?`}
+              : deleteDialog?.type === 'event'
+              ? `Вы уверены, что хотите удалить событие "${deleteDialog?.label}"?`
+              : `Вы уверены, что хотите удалить категорию "${deleteDialog?.label}"?`}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
