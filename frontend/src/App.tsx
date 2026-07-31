@@ -10,7 +10,6 @@ import RegisterPage from './pages/RegisterPage';
 import ConfirmEmailPage from './pages/ConfirmEmailPage';
 import EventsPage from './pages/EventsPage';
 import EventDetailPage from './pages/EventDetailPage';
-import CategoriesPage from './pages/CategoriesPage';
 import SettingsPage from './pages/SettingsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 
@@ -39,7 +38,6 @@ export default function App() {
                 <Route element={<Layout />}>
                   <Route path="/events" element={<EventsPage />} />
                   <Route path="/events/:id" element={<EventDetailPage />} />
-                  <Route path="/categories" element={<CategoriesPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/admin" element={<AdminDashboardPage />} />
                 </Route>

@@ -21,7 +21,6 @@ import {
   Logout as LogoutIcon,
   Menu as MenuIcon,
   Event as EventIcon,
-  Category as CategoryIcon,
   Settings as SettingsIcon,
   AdminPanelSettings,
 } from '@mui/icons-material';
@@ -38,7 +37,6 @@ export default function Layout() {
 
   const navItems = [
     { label: 'События', path: '/events', icon: <EventIcon /> },
-    { label: 'Категории', path: '/categories', icon: <CategoryIcon /> },
     { label: 'Настройки', path: '/settings', icon: <SettingsIcon /> },
     ...(user?.isAdmin
       ? [{ label: 'Админ-панель', path: '/admin', icon: <AdminPanelSettings /> }]

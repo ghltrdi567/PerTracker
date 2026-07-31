@@ -10,23 +10,24 @@ using PerFunTracker.Infrastructure.Data;
 namespace PerFunTracker.Api.Endpoints;
 
 /// <summary>
-/// Category management endpoints. Only admins can manage categories.
-/// All endpoints require the "Admin" policy.
+/// Category endpoints.
+/// All authenticated users can list categories (needed for event create/edit forms);
+/// only admins can create and delete them.
 /// </summary>
 public static class CategoryEndpoints
 {
     public static IEndpointRouteBuilder MapCategoryEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/categories").RequireAuthorization("Admin");
+        var group = app.MapGroup("/api/categories").RequireAuthorization();
 
         group.MapGet("/", ListCategories);
-        group.MapPost("/", CreateCategory);
-        group.MapDelete("/{id:guid}", DeleteCategory);
+        group.MapPost("/", CreateCategory).RequireAuthorization("Admin");
+        group.MapDelete("/{id:guid}", DeleteCategory).RequireAuthorization("Admin");
 
         return app;
     }
 
-    // --- GET /api/categories — list all categories (admin only) ---
+    // --- GET /api/categories — list all categories (all authenticated users) ---
 
     private static async Task<Ok<PagedResult<CategoryResponse>>> ListCategories(
         ApplicationDbContext db,
