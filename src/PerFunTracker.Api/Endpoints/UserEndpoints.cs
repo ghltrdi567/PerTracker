@@ -52,7 +52,18 @@ public static class UserEndpoints
         return TypedResults.Ok(new UserSettingsResponse(user.NotifyByEmailOnCompletion));
     }
 
-    private static string GetUserId(HttpContext ctx)
+    /// <summary>
+/// Извлекает ID пользователя из JWT claims.
+///
+    /// JWT содержит claim "sub" (subject) с ID пользователя.
+/// Identity иногда использует ClaimTypes.NameIdentifier вместо sub.
+/// Проверяем оба варианта для совместимости.
+///
+/// Если claim не найден — бросаем UnauthorizedAccessException.
+/// Это не должно происходить при корректной авторизации (middleware отсечёт 401),
+/// но защищает от багов в случае, если middleware пропустил запрос.
+/// </summary>
+private static string GetUserId(HttpContext ctx)
     {
         return ctx.User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)
             ?? ctx.User.FindFirstValue(ClaimTypes.NameIdentifier)

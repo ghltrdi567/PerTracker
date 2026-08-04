@@ -11,8 +11,20 @@ namespace PerFunTracker.Api.Endpoints;
 
 /// <summary>
 /// Category endpoints.
-/// All authenticated users can list categories (needed for event create/edit forms);
-/// only admins can create and delete them.
+///
+/// Разделение прав доступа:
+/// - GET /api/categories — доступен всем аутентифицированным пользователям.
+///   Нужен для селектора категорий при создании/редактировании событий.
+///   Если бы GET был только для админов, обычные пользователи не могли бы
+///   выбрать категорию для своего события.
+///
+/// - POST /api/categories — только для админов (RequireAuthorization("Admin")).
+///   Создание категорий — это управление справочником, доступное только администраторам.
+///   Интерфейс создания находится в админ-панели (AdminDashboardPage).
+///
+/// - DELETE /api/categories/{id} — только для админов.
+///   Удаление категорий — тоже управление справочником.
+///   Кнопка удаления есть только в админ-панели.
 /// </summary>
 public static class CategoryEndpoints
 {

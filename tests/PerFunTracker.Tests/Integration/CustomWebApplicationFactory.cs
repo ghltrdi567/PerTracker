@@ -18,6 +18,26 @@ namespace PerFunTracker.Tests.Integration;
 /// Custom WebApplicationFactory that spins up a Testcontainers PostgreSQL instance
 /// and configures the API to use it instead of the real database.
 /// Implements IAsyncLifetime for container lifecycle management.
+///
+/// Паттерн: Integration Testing с WebApplicationFactory + Testcontainers.
+///
+/// Как это работает:
+/// 1. Testcontainers скачивает и запускает Docker-образ postgres:16-alpine.
+/// 2. WebApplicationFactory создаёт тестовый хост API в памяти (без Kestrel).
+/// 3. ConfigureServices заменяет реальный DbContext на тестовый (указывающий на контейнер).
+/// 4. Миграции EF Core накатываются автоматически.
+/// 5. HTTP-запросы идут через HttpClient к in-memory хосту — без реального TCP.
+///
+/// Arrange-Act-Assert (AAA) паттерн:
+/// - Arrange: CreateUserAsync / CreateOwnedEventAsync / CreateParticipantClientAsync
+///   (хелперы в этом классе, создают данные в БД и возвращают HttpClient с JWT)
+/// - Act: HTTP-запрос к API (GET/POST/PUT/DELETE)
+/// - Assert: проверка статус-кода и тела ответа
+///
+/// IAsyncLifetime:
+/// - InitializeAsync: запускает Docker-контейнер до первого теста.
+/// - DisposeAsync: останавливает контейнер после последнего теста.
+/// - IClassFixture: один контейнер на класс тестов (не на каждый тест).
 /// </summary>
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {

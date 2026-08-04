@@ -10,6 +10,18 @@ namespace PerFunTracker.Api.BackgroundServices;
 /// Background service that consumes the email notification queue and sends emails.
 /// Runs continuously, dequeuing messages one at a time.
 /// Retries failed sends up to 3 times with exponential backoff.
+///
+/// Паттерн "Producer-Consumer" через Channel:
+/// - Producer: EventEndpoints.MarkComplete ставит сообщения в очередь (EnqueueAsync).
+/// - Consumer: этот воркер читает сообщения (DequeueAsync) и отправляет email.
+/// - Очередь (ChannelEmailNotificationQueue) — in-process, unbounded.
+/// - В Phase 2 можно заменить на RabbitMQ/Redis без изменения бизнес-логики.
+///
+/// Exponential backoff (экспоненциальная задержка):
+/// - При неудаче повторяем отправку с задержками: 5с → 15с → 45с.
+/// - Каждая задержка больше предыдущей, чтобы дать SMTP-серверу время восстановиться.
+/// - После 3 неудач сообщение теряется (логируется как Error).
+/// - В production лучше добавить dead-letter queue (DLQ) для потерянных сообщений.
 /// </summary>
 public class EmailNotificationWorker : BackgroundService
 {

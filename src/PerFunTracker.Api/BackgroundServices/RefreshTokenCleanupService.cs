@@ -9,6 +9,18 @@ namespace PerFunTracker.Api.BackgroundServices;
 /// <summary>
 /// Nightly background service that purges expired/revoked refresh tokens
 /// to prevent unbounded table growth.
+///
+/// Паттерн BackgroundService:
+/// - ExecuteAsync выполняется в фоновом потоке на протяжении жизни приложения.
+/// - Бесконечный цикл: Task.Delay → работа → снова Task.Delay.
+/// - CancellationToken передаётся при остановке приложения (graceful shutdown).
+///
+/// Почему ExecuteDeleteAsync, а не SaveChanges + RemoveRange:
+/// - ExecuteDeleteAsync — это массовое удаление (одна SQL-команда DELETE WHERE ...).
+/// - RemoveRange + SaveChanges — загружает каждую запись в память, потом удаляет по одной.
+/// - Для тысяч записей ExecuteDeleteAsync в сотни раз быстрее.
+/// - Недостаток: не загружает сущности в память, поэтому нельзя триггерить
+///   события EF Core (события OnDeleting и т.д.). Для cleanup это не нужно.
 /// </summary>
 public class RefreshTokenCleanupService : BackgroundService
 {

@@ -29,15 +29,33 @@ public static class DependencyInjection
 
         services.AddIdentityCore<AppUser>(options =>
         {
+            // Требуем подтверждение email перед входом — защита от фейковых регистраций.
             options.SignIn.RequireConfirmedEmail = true;
 
-            // Lockout protection
+            // Lockout (блокировка) при многократном неудачном входе.
+            // Защита от brute-force атак на пароль.
+            // Алгоритм:
+            // - Identity считает неудачные попытки входа через CheckPasswordSignInAsync.
+            // - После MaxFailedAccessAttempts (5) неудач подряд пользователь
+            //   блокируется на DefaultLockoutTimeSpan (5 минут).
+            // - Успешный вход сбрасывает счётчик.
+            // - Lockout действует на SignInManager, не на userManager — работает
+            //   только через CheckPasswordSignInAsync, а не через CheckPasswordAsync.
             options.Lockout.AllowedForNewUsers = true;
             options.Lockout.MaxFailedAccessAttempts = 5;
             options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
         })
             .AddEntityFrameworkStores<ApplicationDbContext>()
+            // AddDefaultTokenProviders — регистрирует стандартные провайдеры
+            // для генерации токенов (подтверждение email, сброс пароля, 2FA).
+            // Каждый провайдер генерирует уникальный токен, который хранится
+            // в AspNetUserTokens и проверяется при подтверждении.
             .AddDefaultTokenProviders()
+            // AddSignInManager — регистрирует SignInManager, который:
+            // - Проверяет пароль через PasswordHasher
+            // - Поддерживает lockout (считает попытки)
+            // - Поддерживает two-factor (если включено)
+            // Без AddSignInManager нельзя использовать CheckPasswordSignInAsync
             .AddSignInManager<SignInManager<AppUser>>();
 
         // Required by SignInManager

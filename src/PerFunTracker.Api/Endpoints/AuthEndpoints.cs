@@ -123,6 +123,36 @@ public static class AuthEndpoints
         return TypedResults.Ok(new TokenResponse(accessToken, jwtOptions.Value.AccessTokenMinutes * 60));
     }
 
+    /// <summary>
+    /// POST /api/auth/refresh — ротация refresh-токена.
+    ///
+    /// Алгоритм:
+    /// 1. Читаем refresh-токен из HttpOnly cookie.
+    /// 2. Ищем в БД: если токен есть и IsActive (не истёк и не ревокнут) — продолжаем.
+    /// 3. Ревокуем старый токен (RevokedAt = now).
+    /// 4. Выпускаем новый токен с ReplacedByTokenId = id старого (цепочка ротации).
+    /// 5. Заменяем cookie новым токеном.
+    /// 6. Выдаём новый access token.
+    ///
+    /// Почему ротация — это защита от кражи токена:
+    /// - Если refresh-токен украден, злоумышленник и жертва используют один токен.
+    /// - При ротации: первый (легитимный) refresh ревокует старый токен.
+    /// - Второй (злоумышленник) получает 401, потому что токен уже ревокнут.
+    /// - Это называется "refresh token theft detection".
+    ///
+    /// Race condition (два одновременных refresh):
+    /// - Если два запроса приходят одновременно, оба читают IsActive = true из БД.
+    /// - Первый успевает RevokedAt = now и создаёт новый токен.
+    /// - Второй тоже читает старый токен как IsActive, но уже не успевает...
+    ///   ...потому что старый уже ревокнут. Второй получает 401.
+    /// - Это работает благодаря атомарности: первый запрос пишет RevokedAt,
+    ///   второй SELECT читает уже обновлённые данные.
+    /// - НО: если второй запрос стартовал до COMMIT первого (на разных соединениях),
+    ///   он может прочитать IsActive = true. Для PostgreSQL в режиме Read Committed
+    ///   (по умолчанию) каждый запрос видит только закоммиченные данные.
+    /// - В текущей реализации race condition маловероятен, но для production
+    ///   рекомендуется оптимистичная блокировка (row version / xmin).
+    /// </summary>
     private static async Task<Results<Ok<TokenResponse>, UnauthorizedHttpResult>> Refresh(
         HttpContext ctx,
         ApplicationDbContext db,

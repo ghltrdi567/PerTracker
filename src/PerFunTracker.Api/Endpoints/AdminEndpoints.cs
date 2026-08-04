@@ -70,6 +70,21 @@ public static class AdminEndpoints
     }
 
     // --- DELETE /api/admin/users/{userId} — delete a user (and their data) ---
+    //
+    // Каскадное удаление (cascade delete), реализованное вручную.
+    //
+    // Зачем вручную:
+    // - EF Core каскад настроен на EventParticipant (FK), но не на TrackerEvent.OwnerUserId.
+    // - При удалении пользователя Identity удаляет строку из AspNetUsers.
+    // - Но TrackerEvent.OwnerUserId — это string FK без каскада в БД.
+    //   Если не удалить события вручную, будет FK constraint violation.
+    //
+    // Порядок:
+    // 1. Находим все события, где пользователь — владелец, удаляем.
+    // 2. Находим все refresh-токены пользователя, удаляем (FK на AppUser).
+    // 3. EventParticipant удалится каскадно через EF Core (FK с OnDelete.Cascade).
+    // 4. Сохраняем всё ДО DeleteAsync(user), чтобы не получить FK-ошибку.
+    // 5. Удаляем пользователя через UserManager.DeleteAsync.
 
     private static async Task<Results<NoContent, NotFound, BadRequest<ErrorResponse>>> DeleteUser(
         string userId,

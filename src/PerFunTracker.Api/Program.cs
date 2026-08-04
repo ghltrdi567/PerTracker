@@ -63,6 +63,22 @@ builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
 
+// --- Middleware pipeline — порядок ВАЖЕН! ---
+//
+// 1. UseRateLimiter — проверяет лимиты запросов ДО аутентификации.
+//    Цель: блокировать брутфорс-атаки на /api/auth/login без затрат на расшифровку JWT.
+//    RateLimiter смотрит на IP-адрес (по умолчанию) — аутентификация не нужна.
+//
+// 2. UseCors — устанавливает CORS-заголовки до авторизации.
+//    Цель: браузер отправляет preflight (OPTIONS) без Authorization header.
+//    CORS middleware должен ответить на OPTIONS до того, как Authentication
+//    отклонит запрос из-за отсутствия токена.
+//
+// 3. UseAuthentication — расшифровывает JWT, заполняет HttpContext.User identity.
+//    Если токен невалиден или истёк — User остаётся анонимным.
+//
+// 4. UseAuthorization — проверяет политики (RequireAuthorization, RequireClaim).
+//    Если у User нет нужного claim — 401 Unauthorized или 403 Forbidden.
 app.UseRateLimiter();
 app.UseCors();
 app.UseAuthentication();
@@ -76,7 +92,12 @@ app.MapUserEndpoints();
 app.MapCategoryEndpoints();
 app.MapAdminEndpoints();
 
-// Auto-apply migrations on startup
+// Auto-apply EF Core migrations on startup.
+//
+// В dev-среде это удобно: поднял Docker → миграции накатились → можно работать.
+// В production-среде должен быть отдельный шаг (dotnet ef database update / CI/CD).
+// Автоматические миграции в production опасны: если миграция упадёт,
+// приложение не запустится. Для production лучше контролировать процесс вручную.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

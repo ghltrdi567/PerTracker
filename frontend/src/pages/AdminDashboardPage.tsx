@@ -39,6 +39,32 @@ type TabValue = 'users' | 'events' | 'categories';
 
 const PAGE_SIZE = 20;
 
+/**
+ * Страница админ-панели.
+ *
+ * Три вкладки (Tab):
+ * 1. "Пользователи" — поиск, просмотр, удаление пользователей.
+ * 2. "События" — просмотр и удаление любых событий.
+ * 3. "Категории" — создание и удаление категорий событий.
+ *
+ * Поиск пользователей:
+ * - searchInput — текущее значение текстового поля (controlled input).
+ * - searchQuery — значение, которое уже было отправлено на сервер.
+ * - Разделение нужно, чтобы loadUsers() не зависел от асинхронного setState.
+ * - Проблема: если вызывать setSearchQuery(searchInput), а потом loadUsers(),
+ *   loadUsers() читает searchQuery из замыкания — ещё старое значение.
+ * - Решение: loadUsers() принимает опциональный параметр searchOverride,
+ *   который передаётся напрямую, минуя состояние.
+ *
+ * Пагинация (Load More):
+ * - GET-запросы возвращают PagedResult с totalCount.
+ * - Если items.length < totalCount, показываем кнопку "Загрузить ещё".
+ * - append = true добавляет результаты к текущему списку, не заменяя его.
+ *
+ * Удаление:
+ * - Все три типа (user/event/category) используют один Dialog.
+ * - deleteDialog.type определяет, какой API вызывать и какой текст показать.
+ */
 export default function AdminDashboardPage() {
   const toast = useToast();
   const navigate = useNavigate();

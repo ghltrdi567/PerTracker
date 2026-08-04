@@ -4,6 +4,24 @@ import { CheckCircle, Error, Mail } from '@mui/icons-material';
 import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import { confirmEmail } from '../api/auth';
 
+/**
+ * Страница подтверждения email.
+ *
+ * URL: /confirm-email?userId=...&token=...
+ *
+ * Пользователь попадает сюда из письма (ссылка ведёт на фронтенд, а не напрямую в API).
+ * Фронтенд извлекает userId и token из query-параметров и вызывает API.
+ *
+ * Три состояния (state machine):
+ * 1. 'loading' — запрос к API в процессе, показываем спиннер.
+ * 2. 'success' — API подтвердил email, показываем зелёную галочку и кнопку "Войти".
+ * 3. 'error' — токен недействителен/истёк, показываем красный значок и ссылку на регистрацию.
+ *
+ * Почему фронтенд, а не напрямую API:
+ * - Если отправить пользователя сразу в API, он увидит голый JSON-ответ.
+ * - Фронтенд показывает понятный UI и кнопку для перехода к входу.
+ * - Параметры URL (userId, token) передаются из письма без изменений.
+ */
 export default function ConfirmEmailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
