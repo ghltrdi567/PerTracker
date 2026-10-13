@@ -35,12 +35,16 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Admin", policy => policy.RequireClaim("is_admin", "true"));
 });
 
-// CORS for the React SPA
+// CORS for the React SPA.
+// Origins из конфигурации (env Cors__Origins, запятая-разделённые) — для деплоя
+// SPA и API на разные домены (Vercel → Render). Локально — дефолт ниже.
+var corsOrigins = (builder.Configuration["Cors:Origins"] ?? "http://localhost:5173,http://localhost:3000")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
         policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials()
-              .WithOrigins("http://localhost:5173", "http://localhost:3000"));
+              .WithOrigins(corsOrigins));
 });
 
 // Rate limiting: strict fixed-window limiter on auth endpoints (brute-force protection)

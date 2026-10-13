@@ -253,14 +253,17 @@ public static class AuthEndpoints
     private static void SetRefreshCookie(HttpContext ctx, string token, int refreshTokenDays)
     {
         var env = ctx.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        // В Dev и Test окружениях cookie без Secure (HTTP), в Production — с Secure (HTTPS)
+        // В Dev и Test окружениях cookie без Secure (HTTP), в Production — с Secure (HTTPS).
+        // SameSite=None в Production: SPA живёт на другом домене (Vercel), чем API (Render) —
+        // Strict/Lax не отправят cookie в cross-site запросах, refresh молча сломается.
+        // None требует Secure=true, поэтому работает только на HTTPS.
         var isDevOrTest = env.IsDevelopment() || env.IsEnvironment("Test");
 
         ctx.Response.Cookies.Append(RefreshCookieName, token, new CookieOptions
         {
             HttpOnly = true,
             Secure = !isDevOrTest,
-            SameSite = isDevOrTest ? SameSiteMode.Lax : SameSiteMode.Strict,
+            SameSite = isDevOrTest ? SameSiteMode.Lax : SameSiteMode.None,
             Path = "/api/auth",
             Expires = DateTimeOffset.UtcNow.AddDays(refreshTokenDays),
         });
