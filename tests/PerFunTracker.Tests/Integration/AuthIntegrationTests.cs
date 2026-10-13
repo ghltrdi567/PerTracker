@@ -1,5 +1,7 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PerFunTracker.Infrastructure.Data;
@@ -19,11 +21,68 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         _factory = factory;
     }
 
-    [Fact]
+/// <summary>
+/// Создает HttpClient с контейнером кук для тестирования refresh-токенов.
+/// </summary>
+private HttpClient CreateClientWithCookies()
+{
+    var container = new CookieContainer();
+    var handler = new TestHandler(container);
+    var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        AllowAutoRedirect = false
+    });
+    client.Dispose();
+    var baseAddress = _factory.Server.BaseAddress!;
+    return new HttpClient(handler) { BaseAddress = baseAddress };
+}
+
+/// <summary>
+/// HttpClientHandler с поддержкой CookieContainer для тестов refresh-токенов.
+/// Автоматически добавляет куки в запросы и извлекает из ответов.
+/// </summary>
+private class TestHandler : DelegatingHandler
+{
+    private readonly CookieContainer _container;
+
+    public TestHandler(CookieContainer container)
+    {
+        _container = container;
+        InnerHandler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseDefaultCredentials = true
+        };
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var uri = request.RequestUri!;
+        var cookies = _container.GetCookieHeader(uri);
+        if (!string.IsNullOrEmpty(cookies))
+        {
+            request.Headers.Add("Cookie", cookies);
+        }
+
+        var response = await base.SendAsync(request, cancellationToken);
+
+        if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
+        {
+            foreach (var setCookie in setCookies)
+            {
+                _container.SetCookies(uri, setCookie);
+            }
+        }
+
+        return response;
+    }
+}
+
+    [DockerFact]
     public async Task RefreshToken_Rotation_RevokesOldToken()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithCookies();
         var email = $"rotation-{Guid.NewGuid():N}@example.com";
         const string password = "TestPass123!";
 
@@ -57,6 +116,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var accessToken = loginContent.GetProperty("accessToken").GetString()!;
 
         // Get the refresh token from the cookie
+        // Note: HandleCookies=false ensures Set-Cookie headers are NOT consumed by the CookieContainerHandler
         var cookies = loginResponse.Headers.GetValues("Set-Cookie").ToList();
         var refreshCookie = cookies.FirstOrDefault(c => c.StartsWith("refreshToken="));
         Assert.NotNull(refreshCookie);
@@ -80,11 +140,11 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         }
     }
 
-    [Fact]
+    [DockerFact]
     public async Task RefreshToken_Reuse_ReturnsUnauthorized()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithCookies();
         var email = $"reuse-{Guid.NewGuid():N}@example.com";
         const string password = "TestPass123!";
 
@@ -133,7 +193,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, reuseResponse.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Login_WithWrongPassword_ReturnsUnauthorized()
     {
         // Arrange

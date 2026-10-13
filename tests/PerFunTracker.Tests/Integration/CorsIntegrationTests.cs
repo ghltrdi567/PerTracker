@@ -16,7 +16,7 @@ public class CorsIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         _factory = factory;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Cors_AllowedOrigin_HasAllowOriginHeader()
     {
         // Arrange — simulate a request from the React dev server
@@ -34,7 +34,7 @@ public class CorsIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal("http://localhost:5173", origin);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Cors_DisallowedOrigin_NoAllowOriginHeader()
     {
         // Arrange — simulate a request from an evil site
@@ -50,7 +50,7 @@ public class CorsIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             "Should NOT have Access-Control-Allow-Origin for disallowed origin");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Cors_Preflight_Returns200()
     {
         // Arrange — CORS preflight is an OPTIONS request
@@ -70,7 +70,7 @@ public class CorsIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             "Preflight response should include Access-Control-Allow-Origin");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Cors_Credentials_Allowed()
     {
         // Arrange

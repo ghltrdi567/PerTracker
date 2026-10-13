@@ -15,7 +15,7 @@ public class HealthCheckIntegrationTests : IClassFixture<CustomWebApplicationFac
         _factory = factory;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Health_Returns200()
     {
         // Arrange
@@ -28,7 +28,7 @@ public class HealthCheckIntegrationTests : IClassFixture<CustomWebApplicationFac
         response.EnsureSuccessStatusCode();
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Health_DoesNotRequireAuth()
     {
         // Arrange — no Authorization header, no token

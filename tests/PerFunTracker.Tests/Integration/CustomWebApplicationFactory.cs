@@ -5,9 +5,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PerFunTracker.Core.Entities;
+using PerFunTracker.Core.Services;
 using PerFunTracker.Infrastructure.Data;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -28,6 +30,11 @@ namespace PerFunTracker.Tests.Integration;
 /// 4. Миграции EF Core накатываются автоматически.
 /// 5. HTTP-запросы идут через HttpClient к in-memory хосту — без реального TCP.
 ///
+/// Если Docker недоступен:
+/// - Конструктор НЕ падает (container = null).
+/// - InitializeAsync ничего не делает.
+/// - Тесты с [DockerFact] пропускаются с сообщением "Docker is not running".
+///
 /// Arrange-Act-Assert (AAA) паттерн:
 /// - Arrange: CreateUserAsync / CreateOwnedEventAsync / CreateParticipantClientAsync
 ///   (хелперы в этом классе, создают данные в БД и возвращают HttpClient с JWT)
@@ -41,12 +48,30 @@ namespace PerFunTracker.Tests.Integration;
 /// </summary>
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:16-alpine")
-        .WithDatabase("perfuntracker_test")
-        .WithUsername("perfun_test")
-        .WithPassword("perfun_test_pass")
-        .WithCleanUp(true)
-        .Build();
+    private readonly PostgreSqlContainer? _container;
+
+    /// <summary>
+    /// Конструктор не должен падать при отсутствии Docker.
+    /// Если Build() выбрасывает исключение, _container = null,
+    /// и тесты с [DockerFact] будут пропущены.
+    /// </summary>
+    public CustomWebApplicationFactory()
+    {
+        try
+        {
+            _container = new PostgreSqlBuilder("postgres:16-alpine")
+                .WithDatabase("perfuntracker_test")
+                .WithUsername("perfun_test")
+                .WithPassword("perfun_test_pass")
+                .WithCleanUp(true)
+                .Build();
+        }
+        catch
+        {
+            // Docker is not available — tests will be skipped by [DockerFact]
+            _container = null;
+        }
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -58,15 +83,33 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
             if (descriptor is not null)
                 services.Remove(descriptor);
 
-            // Add test DbContext pointing to the Testcontainers PostgreSQL
-            services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseNpgsql(_container.GetConnectionString()));
+            if (_container is not null)
+            {
+                // Add test DbContext pointing to the Testcontainers PostgreSQL
+                services.AddDbContext<ApplicationDbContext>(options =>
+                    options.UseNpgsql(_container.GetConnectionString()));
 
-            // Ensure the database is created and migrations are applied
-            var sp = services.BuildServiceProvider();
-            using var scope = sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            db.Database.Migrate();
+                // Ensure the database is created and migrations are applied
+                var sp = services.BuildServiceProvider();
+                using var scope = sp.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                db.Database.Migrate();
+            }
+            else
+            {
+                // Fallback to in-memory database when Docker is not available.
+                // This allows the factory to be created, but tests will fail on DB operations.
+                // Tests should use [DockerFact] to skip gracefully.
+                services.AddDbContext<ApplicationDbContext>(options =>
+                    options.UseInMemoryDatabase("PerFunTrackerTest"));
+            }
+
+            // Replace IEmailSender with a no-op stub to avoid needing MailHog during tests.
+            // The confirmation email is sent during registration; without this stub,
+            // tests fail because localhost:1025 (MailHog) is not available in CI/test env.
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(sp =>
+                new StubEmailSender());
         });
 
         // Use test environment
@@ -163,13 +206,15 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         Guid eventId,
         string email = "member@example.com",
         string password = "MemberPass123!",
-        string displayName = "Member User")
+        string displayName = "Member User",
+        string ownerEmail = "owner@example.com",
+        string ownerPassword = "OwnerPass123!")
     {
         await CreateUserAsync(email, password, displayName);
         var memberClient = await CreateAuthenticatedClientAsync(email, password);
 
         // Owner adds the member to the event
-        var ownerClient = await CreateAuthenticatedClientAsync("owner@example.com", "OwnerPass123!");
+        var ownerClient = await CreateAuthenticatedClientAsync(ownerEmail, ownerPassword);
         var addResponse = await ownerClient.PostAsJsonAsync($"/api/events/{eventId}/participants", new
         {
             email
@@ -182,11 +227,26 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
     // IAsyncLifetime
     public async Task InitializeAsync()
     {
-        await _container.StartAsync();
+        if (_container is not null)
+            await _container.StartAsync();
     }
 
     public new async Task DisposeAsync()
     {
-        await _container.StopAsync();
+        if (_container is not null)
+            await _container.StopAsync();
+    }
+}
+
+/// <summary>
+/// No-op email sender that silently discards all emails.
+/// Used during integration tests to avoid needing a real SMTP server (MailHog).
+/// </summary>
+public class StubEmailSender : IEmailSender
+{
+    public Task SendAsync(string toEmail, string subject, string htmlBody)
+    {
+        // Silently discard — no SMTP connection needed
+        return Task.CompletedTask;
     }
 }

@@ -21,33 +21,37 @@ public class NotificationIntegrationTests : IClassFixture<CustomWebApplicationFa
         _factory = factory;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task MarkComplete_SkipsCompleter_EnqueuesForOtherParticipants()
     {
         // Arrange: create event with owner + 2 members
+        var ownerEmail = $"notif-owner-{Guid.NewGuid():N}@example.com";
         var (ownerClient, eventId) = await _factory.CreateOwnedEventAsync(
-            email: "notif-owner@example.com",
+            email: ownerEmail,
             password: "NotifOwner123!",
             eventTitle: "Notification Test");
 
+        var member1Email = $"notif-member1-{Guid.NewGuid():N}@example.com";
         var member1Client = await _factory.CreateParticipantClientAsync(
             eventId,
-            email: "notif-member1@example.com",
+            email: member1Email,
             password: "NotifMember123!",
-            displayName: "Member One");
+            displayName: "Member One",
+            ownerEmail: ownerEmail);
 
         // Create a second member (manually, since CreateParticipantClientAsync uses default owner)
+        var member2Email = $"notif-member2-{Guid.NewGuid():N}@example.com";
         await _factory.CreateUserAsync(
-            email: "notif-member2@example.com",
+            email: member2Email,
             password: "NotifMember123!",
             displayName: "Member Two");
 
         var ownerAddClient = await _factory.CreateAuthenticatedClientAsync(
-            "notif-owner@example.com", "NotifOwner123!");
+            ownerEmail, "NotifOwner123!");
 
         var addResponse = await ownerAddClient.PostAsJsonAsync($"/api/events/{eventId}/participants", new
         {
-            email = "notif-member2@example.com"
+            email = member2Email
         });
         addResponse.EnsureSuccessStatusCode();
 
@@ -92,18 +96,19 @@ public class NotificationIntegrationTests : IClassFixture<CustomWebApplicationFa
         }
 
         // Owner and member2 should get notifications
-        Assert.Contains("notif-owner@example.com", notifiedEmails);
-        Assert.Contains("notif-member2@example.com", notifiedEmails);
+        Assert.Contains(ownerEmail, notifiedEmails);
+        Assert.Contains(member2Email, notifiedEmails);
         // Completer should NOT be notified
-        Assert.DoesNotContain("notif-member1@example.com", notifiedEmails);
+        Assert.DoesNotContain(member1Email, notifiedEmails);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task MarkComplete_RespectsNotifyByEmailFlag()
     {
         // Arrange: create event with owner who has notifications disabled
+        var ownerEmail = $"optout-owner-{Guid.NewGuid():N}@example.com";
         var (ownerClient, eventId) = await _factory.CreateOwnedEventAsync(
-            email: "optout-owner@example.com",
+            email: ownerEmail,
             password: "OptOut123!",
             eventTitle: "Opt-Out Test");
 
@@ -115,29 +120,31 @@ public class NotificationIntegrationTests : IClassFixture<CustomWebApplicationFa
         settingsResponse.EnsureSuccessStatusCode();
 
         // Add a member with notifications enabled (default)
+        var member1Email = $"optout-member-{Guid.NewGuid():N}@example.com";
         await _factory.CreateUserAsync(
-            email: "optout-member@example.com",
+            email: member1Email,
             password: "OptOut123!",
             displayName: "Opt-Out Member");
 
         var ownerAddClient = await _factory.CreateAuthenticatedClientAsync(
-            "optout-owner@example.com", "OptOut123!");
+            ownerEmail, "OptOut123!");
 
         var addResponse = await ownerAddClient.PostAsJsonAsync($"/api/events/{eventId}/participants", new
         {
-            email = "optout-member@example.com"
+            email = member1Email
         });
         addResponse.EnsureSuccessStatusCode();
 
         // Also add a member with notifications disabled
+        var member2Email = $"optout-member2-{Guid.NewGuid():N}@example.com";
         await _factory.CreateUserAsync(
-            email: "optout-member2@example.com",
+            email: member2Email,
             password: "OptOut123!",
             displayName: "Opt-Out Member 2");
 
         // Disable notifications for member2
         var member2Client = await _factory.CreateAuthenticatedClientAsync(
-            "optout-member2@example.com", "OptOut123!");
+            member2Email, "OptOut123!");
 
         var member2SettingsResponse = await member2Client.PutAsJsonAsync("/api/users/me/settings", new
         {
@@ -148,7 +155,7 @@ public class NotificationIntegrationTests : IClassFixture<CustomWebApplicationFa
         // Add member2 to event
         var addResponse2 = await ownerAddClient.PostAsJsonAsync($"/api/events/{eventId}/participants", new
         {
-            email = "optout-member2@example.com"
+            email = member2Email
         });
         addResponse2.EnsureSuccessStatusCode();
 
@@ -169,14 +176,15 @@ public class NotificationIntegrationTests : IClassFixture<CustomWebApplicationFa
 
         // Act: member1 marks complete
         var member1Client = await _factory.CreateAuthenticatedClientAsync(
-            "optout-member@example.com", "OptOut123!");
+            member1Email, "OptOut123!");
 
         var completeResponse = await member1Client.PostAsJsonAsync(
             $"/api/events/{eventId}/complete", new { note = "Test" });
         completeResponse.EnsureSuccessStatusCode();
 
-        // Assert: only member1 (the completer) should be skipped
-        // Owner (opt-out) and member2 (opt-out) should also be skipped
+        // Assert: all participants opted out, so no notifications should be sent
+        // Owner (opt-out), member2 (opt-out) — only member1 has notifications on
+        // but member1 is the completer, so they're skipped.
         var notifiedEmails = new List<string>();
         while (true)
         {
@@ -192,8 +200,7 @@ public class NotificationIntegrationTests : IClassFixture<CustomWebApplicationFa
             }
         }
 
-        // Only member1 (who completed) gets no notification
-        // Nobody else should have been notified since they all opted out
+        // Nobody should have been notified
         Assert.Empty(notifiedEmails);
     }
 }

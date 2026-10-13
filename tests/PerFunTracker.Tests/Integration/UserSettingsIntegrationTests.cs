@@ -17,7 +17,7 @@ public class UserSettingsIntegrationTests : IClassFixture<CustomWebApplicationFa
         _factory = factory;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task GetSettings_ReturnsDefaultTrue()
     {
         // Arrange — create a user and log in
@@ -34,7 +34,7 @@ public class UserSettingsIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.True(content.GetProperty("notifyByEmailOnCompletion").GetBoolean());
     }
 
-    [Fact]
+    [DockerFact]
     public async Task UpdateSettings_DisableNotification_ReturnsFalse()
     {
         // Arrange
@@ -54,7 +54,7 @@ public class UserSettingsIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.False(content.GetProperty("notifyByEmailOnCompletion").GetBoolean());
     }
 
-    [Fact]
+    [DockerFact]
     public async Task UpdateSettings_EnableNotification_ReturnsTrue()
     {
         // Arrange
@@ -79,7 +79,7 @@ public class UserSettingsIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.True(content.GetProperty("notifyByEmailOnCompletion").GetBoolean());
     }
 
-    [Fact]
+    [DockerFact]
     public async Task GetSettings_RequiresAuth_Returns401()
     {
         // Arrange — no auth header

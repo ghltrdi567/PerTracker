@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,7 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         _factory = factory;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Register_DuplicateEmail_Returns400()
     {
         // Arrange
@@ -48,7 +49,7 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Register_WeakPassword_Returns400()
     {
         // Arrange
@@ -66,7 +67,7 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Login_UnconfirmedEmail_Returns400()
     {
         // Arrange — create user WITHOUT confirming email
@@ -95,7 +96,7 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Refresh_ExpiredToken_Returns401()
     {
         // Arrange — register, confirm, login to get a refresh token
@@ -129,7 +130,7 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Logout_WithoutToken_StillReturns200()
     {
         // Arrange — no refresh token cookie
@@ -142,11 +143,15 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         response.EnsureSuccessStatusCode();
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Logout_RevokesRefreshToken()
     {
         // Arrange — register, confirm, login
-        var client = _factory.CreateClient();
+        var container = new CookieContainer();
+        var handler = new TestHandler(container);
+        var baseAddress = _factory.Server.BaseAddress!;
+        var client = new HttpClient(handler) { BaseAddress = baseAddress };
+        
         var email = $"logout-{Guid.NewGuid():N}@example.com";
 
         await _factory.CreateUserAsync(email, "TestPass123!", "Logout Test");
@@ -173,7 +178,47 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         Assert.NotNull(stored.RevokedAt);
     }
 
-    [Fact]
+    /// <summary>
+    /// HttpClientHandler с поддержкой CookieContainer для тестов.
+    /// </summary>
+    private class TestHandler : DelegatingHandler
+    {
+        private readonly CookieContainer _container;
+
+        public TestHandler(CookieContainer container)
+        {
+            _container = container;
+            InnerHandler = new HttpClientHandler
+            {
+                AllowAutoRedirect = false,
+                UseDefaultCredentials = true
+            };
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri!;
+            var cookies = _container.GetCookieHeader(uri);
+            if (!string.IsNullOrEmpty(cookies))
+            {
+                request.Headers.Add("Cookie", cookies);
+            }
+
+            var response = await base.SendAsync(request, cancellationToken);
+
+            if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
+            {
+                foreach (var setCookie in setCookies)
+                {
+                    _container.SetCookies(uri, setCookie);
+                }
+            }
+
+            return response;
+        }
+    }
+
+    [DockerFact]
     public async Task Register_FirstUser_BecomesAdmin()
     {
         // Arrange — use a fresh factory to ensure no users exist.

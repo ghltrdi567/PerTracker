@@ -20,7 +20,7 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
         _factory = factory;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task ListCategories_RegularUser_Returns200()
     {
         // Arrange — regular user (not admin)
@@ -35,7 +35,7 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
         response.EnsureSuccessStatusCode();
     }
 
-    [Fact]
+    [DockerFact]
     public async Task CreateCategory_RegularUser_Returns403()
     {
         // Arrange
@@ -54,7 +54,7 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteCategory_RegularUser_Returns403()
     {
         // Arrange — create a category as admin, then try to delete as regular user
@@ -83,7 +83,7 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task CreateCategory_Admin_Returns201()
     {
         // Arrange
@@ -105,7 +105,7 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
         Assert.Equal("💪", content.GetProperty("icon").GetString());
     }
 
-    [Fact]
+    [DockerFact]
     public async Task CreateCategory_DuplicateName_Returns400()
     {
         // Arrange — create a category, then try to create another with the same name
@@ -132,7 +132,7 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteCategory_Admin_Returns204()
     {
         // Arrange
@@ -156,7 +156,7 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
         Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteCategory_Nonexistent_Returns404()
     {
         // Arrange

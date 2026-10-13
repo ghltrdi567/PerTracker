@@ -293,7 +293,7 @@ public static class EventEndpoints
 
     private static async Task<Results<NoContent, NotFound, ForbidHttpResult, BadRequest<ErrorResponse>>> RemoveParticipant(
         Guid id,
-        string userIdToRemove,
+        string userId,
         ApplicationDbContext db,
         HttpContext ctx)
     {
@@ -306,13 +306,13 @@ public static class EventEndpoints
         if (evt is null)
             return TypedResults.NotFound();
 
-        var participant = evt.Participants.FirstOrDefault(p => p.UserId == userIdToRemove);
+        var participant = evt.Participants.FirstOrDefault(p => p.UserId == userId);
         if (participant is null)
             return TypedResults.NotFound();
 
         // Owner can remove anyone; Members can only remove themselves
         var isOwner = evt.OwnerUserId == currentUserId;
-        var isSelfRemoval = userIdToRemove == currentUserId;
+        var isSelfRemoval = userId == currentUserId;
 
         if (!isOwner && !isSelfRemoval)
             return TypedResults.Forbid();

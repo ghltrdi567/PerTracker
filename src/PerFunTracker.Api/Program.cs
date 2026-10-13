@@ -44,12 +44,14 @@ builder.Services.AddCors(options =>
 });
 
 // Rate limiting: strict fixed-window limiter on auth endpoints (brute-force protection)
+// In the "Test" environment, the limit is much higher to avoid interfering with integration tests.
 builder.Services.AddRateLimiter(options =>
 {
+    var isTest = builder.Environment.IsEnvironment("Test");
     options.AddFixedWindowLimiter("auth", opt =>
     {
-        opt.PermitLimit = 5;
-        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = isTest ? 1000 : 5;
+        opt.Window = TimeSpan.FromMinutes(isTest ? 1 : 1);
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
     });

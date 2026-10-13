@@ -20,7 +20,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         _factory = factory;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task ListUsers_RegularUser_Returns403()
     {
         // Arrange
@@ -35,7 +35,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task ListUsers_Admin_Returns200()
     {
         // Arrange
@@ -50,7 +50,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.True(content.GetProperty("items").GetArrayLength() > 0);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task ListUsers_Admin_SearchByEmail()
     {
         // Arrange — create a user with a unique email, then search for it
@@ -72,7 +72,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(targetEmail, items[0].GetProperty("email").GetString());
     }
 
-    [Fact]
+    [DockerFact]
     public async Task ListAllEvents_RegularUser_Returns403()
     {
         // Arrange
@@ -87,7 +87,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task ListAllEvents_Admin_Returns200()
     {
         // Arrange — create an event first so the list isn't empty
@@ -107,7 +107,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.True(content.GetProperty("items").GetArrayLength() > 0);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteAnyEvent_Admin_Returns204()
     {
         // Arrange — admin creates an event, then deletes it via admin endpoint
@@ -128,7 +128,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteAnyEvent_RegularUser_Returns403()
     {
         // Arrange
@@ -143,7 +143,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteUser_Admin_RemovesUserAndOwnedEvents()
     {
         // Arrange — create a target user with an event
@@ -189,7 +189,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         }
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteUser_Admin_Nonexistent_Returns404()
     {
         // Arrange
@@ -202,7 +202,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task DeleteUser_RegularUser_Returns403()
     {
         // Arrange
@@ -217,7 +217,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task MakeAdmin_RegularUser_Returns403()
     {
         // Arrange
@@ -235,7 +235,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task MakeAdmin_Admin_PromotesUser()
     {
         // Arrange — create a target user to promote
@@ -259,7 +259,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.True(user.IsAdmin);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task MakeAdmin_AlreadyAdmin_Returns400()
     {
         // Arrange — create target user and promote via DB
@@ -285,7 +285,7 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task MakeAdmin_NonexistentUser_Returns404()
     {
         // Arrange

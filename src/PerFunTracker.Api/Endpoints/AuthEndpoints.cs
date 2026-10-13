@@ -107,13 +107,18 @@ public static class AuthEndpoints
         if (user is null)
             return TypedResults.Unauthorized();
 
-        // CheckPasswordSignInAsync enforces lockout (Counts failed attempts, respects MaxFailedAccessAttempts)
+        // Check email confirmation BEFORE password.
+        // CheckPasswordSignInAsync uses SignInManager which may refuse unconfirmed
+        // accounts (RequireConfirmedEmail = true), so we explicitly check first
+        // and return 400 instead of 401 to give a clearer error message.
+        if (!await userManager.IsEmailConfirmedAsync(user))
+            return TypedResults.BadRequest(new ErrorResponse(["Email not confirmed."]));
+
+        // CheckPasswordSignInAsync enforces lockout (counts failed attempts,
+        // respects MaxFailedAccessAttempts, DefaultLockoutTimeSpan)
         var signInResult = await signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
         if (!signInResult.Succeeded)
             return TypedResults.Unauthorized();
-
-        if (!await userManager.IsEmailConfirmedAsync(user))
-            return TypedResults.BadRequest(new ErrorResponse(["Email not confirmed."]));
 
         var accessToken = jwtTokenService.GenerateAccessToken(user.Id, user.Email!, user.DisplayName, user.IsAdmin);
         var refreshToken = await IssueRefreshToken(user.Id, jwtTokenService, db, jwtOptions.Value);
@@ -247,13 +252,15 @@ public static class AuthEndpoints
 
     private static void SetRefreshCookie(HttpContext ctx, string token, int refreshTokenDays)
     {
-        var isDev = ctx.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
+        var env = ctx.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        // В Dev и Test окружениях cookie без Secure (HTTP), в Production — с Secure (HTTPS)
+        var isDevOrTest = env.IsDevelopment() || env.IsEnvironment("Test");
 
         ctx.Response.Cookies.Append(RefreshCookieName, token, new CookieOptions
         {
             HttpOnly = true,
-            Secure = !isDev,
-            SameSite = isDev ? SameSiteMode.Lax : SameSiteMode.Strict,
+            Secure = !isDevOrTest,
+            SameSite = isDevOrTest ? SameSiteMode.Lax : SameSiteMode.Strict,
             Path = "/api/auth",
             Expires = DateTimeOffset.UtcNow.AddDays(refreshTokenDays),
         });
