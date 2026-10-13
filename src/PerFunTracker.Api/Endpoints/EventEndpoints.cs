@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using PerFunTracker.Api.Models;
 using PerFunTracker.Core.Entities;
 using PerFunTracker.Core.Services;
@@ -285,7 +286,21 @@ public static class EventEndpoints
         };
 
         evt.Participants.Add(participant);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is NpgsqlException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+            })
+        {
+            // Два одновременных запроса прошли проверку Any() выше (оба увидели
+            // «нет участника») и оба дошли до INSERT — UNIQUE-нарушение в БД
+            // означает «участник уже добавлен». Возвращаем тот же 400, что и
+            // при последовательном повторе, вместо необработанного 500.
+            return TypedResults.BadRequest(new ErrorResponse(["User is already a participant."]));
+        }
 
         var response = new ParticipantResponse(
             userToAdd.Id,
