@@ -48,54 +48,22 @@ public class EventEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationF
     [DockerFact]
     public async Task CreateEvent_WithNonExistentCategory_Returns400()
     {
-        // Arrange
-        var (client, _) = await _factory.CreateOwnedEventAsync(
-            email: $"edge-cat-{Guid.NewGuid():N}@example.com");
+        // Arrange — authenticated client (the earlier version logged in but never
+        // attached the Bearer token, and POSTed to the admin-only /api/categories)
+        var email = $"edge-cat-{Guid.NewGuid():N}@example.com";
+        await _factory.CreateUserAsync(email, "TestPass123!", "Edge Cat");
+        var client = await _factory.CreateAuthenticatedClientAsync(email, "TestPass123!");
 
-        // Act — try to create event with a category ID that doesn't exist
-        // First, create a valid category so we can test the non-existent case separately
-        var categoryClient = _factory.CreateClient();
-        var catEmail = $"cat-{Guid.NewGuid():N}@example.com";
-        await _factory.CreateUserAsync(catEmail, "TestPass123!", "Category Owner");
-        var catLogin = await categoryClient.PostAsJsonAsync("/api/auth/login", new
-        {
-            email = catEmail,
-            password = "TestPass123!"
-        });
-        catLogin.EnsureSuccessStatusCode();
-
-        var catResponse = await categoryClient.PostAsJsonAsync("/api/categories", new
-        {
-            name = "Test Category",
-            color = "#1E88E5"
-        });
-        catResponse.EnsureSuccessStatusCode();
-        var catId = (await catResponse.Content.ReadFromJsonAsync<JsonElement>())
-            .GetProperty("id").ToString();
-
-        // Now try with a completely different non-existent ID
-        var newClient = _factory.CreateClient();
-        var newEmail = $"edge-cat2-{Guid.NewGuid():N}@example.com";
-        await _factory.CreateUserAsync(newEmail, "TestPass123!", "Edge Cat 2");
-        var newLogin = await newClient.PostAsJsonAsync("/api/auth/login", new
-        {
-            email = newEmail,
-            password = "TestPass123!"
-        });
-        newLogin.EnsureSuccessStatusCode();
-
-        var response = await newClient.PostAsJsonAsync("/api/events", new
+        // Act — event with a categoryId that doesn't exist in the Categories table
+        var response = await client.PostAsJsonAsync("/api/events", new
         {
             title = "Event with bad category",
             description = (string?)null,
-            categoryId = Guid.NewGuid() // Completely random ID that doesn't exist
+            categoryId = Guid.NewGuid()
         });
 
-        // Assert — should return 400 (bad request) because category doesn't exist
-        Assert.True(
-            response.StatusCode == System.Net.HttpStatusCode.BadRequest ||
-            response.StatusCode == System.Net.HttpStatusCode.NotFound,
-            $"Expected 400 or 404, got {response.StatusCode}");
+        // Assert — 400, not 500 (without validation SaveChanges would fail on the FK)
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [DockerFact]

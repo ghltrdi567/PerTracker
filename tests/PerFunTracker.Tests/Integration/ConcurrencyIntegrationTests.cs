@@ -1,6 +1,4 @@
-using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PerFunTracker.Infrastructure.Data;
@@ -28,37 +26,31 @@ public class ConcurrencyIntegrationTests : IClassFixture<CustomWebApplicationFac
     [DockerFact]
     public async Task ConcurrentRefresh_SameToken_OnlyOneSucceeds()
     {
-        // Arrange — register, confirm, login to get a refresh token
-        var container = new CookieContainer();
-        var handler = new CookieHandler(container);
-        var baseAddress = _factory.Server.BaseAddress!;
-        var client = new HttpClient(handler) { BaseAddress = baseAddress };
-        
+        // Arrange — register, confirm, login to get a refresh token.
+        // Factory clients only (in-memory TestServer): the old version used a custom
+        // CookieHandler over a REAL HttpClientHandler → "Connection refused localhost:80" in CI.
+        var loginClient = _factory.CreateClient();
         var email = $"conc-refresh-{Guid.NewGuid():N}@example.com";
-        
+
         await _factory.CreateUserAsync(email, "TestPass123!", "Conc Refresh");
-        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        var loginResponse = await loginClient.PostAsJsonAsync("/api/auth/login", new
         {
             email,
             password = "TestPass123!"
         });
         loginResponse.EnsureSuccessStatusCode();
 
-        // Extract the refresh token from the cookie
+        // Extract the refresh token from the Set-Cookie response header
         var cookies = loginResponse.Headers.GetValues("Set-Cookie").ToList();
         var refreshCookie = cookies.First(c => c.StartsWith("refreshToken="));
         var refreshToken = refreshCookie.Split(';')[0].Replace("refreshToken=", "");
 
-        // Create two separate clients with the same refresh token cookie
-        var container1 = new CookieContainer();
-        container1.SetCookies(new Uri("http://localhost"), refreshCookie);
-        var handler1 = new CookieHandler(container1);
-        var client1 = new HttpClient(handler1) { BaseAddress = _factory.Server.BaseAddress! };
+        // Two clients with the SAME refresh token cookie, sent manually
+        var client1 = _factory.CreateClient();
+        client1.DefaultRequestHeaders.Add("Cookie", $"refreshToken={refreshToken}");
 
-        var container2 = new CookieContainer();
-        container2.SetCookies(new Uri("http://localhost"), refreshCookie);
-        var handler2 = new CookieHandler(container2);
-        var client2 = new HttpClient(handler2) { BaseAddress = _factory.Server.BaseAddress! };
+        var client2 = _factory.CreateClient();
+        client2.DefaultRequestHeaders.Add("Cookie", $"refreshToken={refreshToken}");
 
         // Act — send two refresh requests simultaneously
         var task1 = client1.PostAsJsonAsync("/api/auth/refresh", new { });
@@ -112,45 +104,5 @@ public class ConcurrencyIntegrationTests : IClassFixture<CustomWebApplicationFac
             .Where(p => p.EventId == eventId && p.User!.Email == memberEmail)
             .ToListAsync();
         Assert.Single(participants);
-    }
-
-    /// <summary>
-    /// HttpClientHandler с поддержкой CookieContainer для тестов.
-    /// </summary>
-    private class CookieHandler : DelegatingHandler
-    {
-        private readonly CookieContainer _container;
-
-        public CookieHandler(CookieContainer container)
-        {
-            _container = container;
-            InnerHandler = new HttpClientHandler
-            {
-                AllowAutoRedirect = false,
-                UseDefaultCredentials = true
-            };
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var uri = request.RequestUri!;
-            var cookies = _container.GetCookieHeader(uri);
-            if (!string.IsNullOrEmpty(cookies))
-            {
-                request.Headers.Add("Cookie", cookies);
-            }
-
-            var response = await base.SendAsync(request, cancellationToken);
-
-            if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
-            {
-                foreach (var setCookie in setCookies)
-                {
-                    _container.SetCookies(uri, setCookie);
-                }
-            }
-
-            return response;
-        }
     }
 }

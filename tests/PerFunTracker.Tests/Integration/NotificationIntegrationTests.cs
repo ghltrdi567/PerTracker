@@ -37,7 +37,8 @@ public class NotificationIntegrationTests : IClassFixture<CustomWebApplicationFa
             email: member1Email,
             password: "NotifMember123!",
             displayName: "Member One",
-            ownerEmail: ownerEmail);
+            ownerEmail: ownerEmail,
+            ownerPassword: "NotifOwner123!");
 
         // Create a second member (manually, since CreateParticipantClientAsync uses default owner)
         var member2Email = $"notif-member2-{Guid.NewGuid():N}@example.com";

@@ -92,11 +92,20 @@ public class JwtTokenService : IJwtTokenService
     /// - Random.NextBytes — НЕ криптостойкий, предсказуем (можно вычислить следующий токен).
     /// Для refresh-токена (аналог пароля) нужен ТОЛЬКО CSPRNG.
     ///
-    /// 32 байта = 256 бит случайности → base64 строка ~44 символа.
+    /// 32 байта = 256 бит случайности → base64 строка ~43 символа.
     /// Перебор 2^256 вариантов невозможен даже на квантовом компьютере.
     /// </summary>
     public string GenerateRefreshToken()
     {
-        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        // URL-safe base64 (base64url): '+' → '-', '/' → '_', паддинг '=' удалён.
+        // ASP.NET Core URL-encode значения cookie (Uri.EscapeDataString в
+        /// ResponseCookies): обычный base64 с '+'/'/'/'=' превращался бы в
+        /// %2B/%2F/%3D в заголовке Set-Cookie и не совпадал со строкой из БД
+        /// у клиентов, читающих cookie как сырую строку. base64url не
+        /// содержит символов, требующих кодирования.
+        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
     }
 }

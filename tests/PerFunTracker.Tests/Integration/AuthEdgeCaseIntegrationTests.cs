@@ -1,6 +1,4 @@
-using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PerFunTracker.Infrastructure.Data;
@@ -146,29 +144,29 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
     [DockerFact]
     public async Task Logout_RevokesRefreshToken()
     {
-        // Arrange — register, confirm, login
-        var container = new CookieContainer();
-        var handler = new TestHandler(container);
-        var baseAddress = _factory.Server.BaseAddress!;
-        var client = new HttpClient(handler) { BaseAddress = baseAddress };
-        
+        // Arrange — register, confirm, login. Factory client only (in-memory
+        // TestServer): the old TestHandler wrapped a REAL HttpClientHandler →
+        // "Connection refused localhost:80" in CI.
         var email = $"logout-{Guid.NewGuid():N}@example.com";
 
         await _factory.CreateUserAsync(email, "TestPass123!", "Logout Test");
-        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        var loginClient = _factory.CreateClient();
+        var loginResponse = await loginClient.PostAsJsonAsync("/api/auth/login", new
         {
             email,
             password = "TestPass123!"
         });
         loginResponse.EnsureSuccessStatusCode();
 
-        // Get the refresh token value from cookie
+        // Get the refresh token value from the Set-Cookie response header
         var cookies = loginResponse.Headers.GetValues("Set-Cookie").ToList();
         var refreshCookie = cookies.First(c => c.StartsWith("refreshToken="));
         var refreshToken = refreshCookie.Split(';')[0].Replace("refreshToken=", "");
 
-        // Act — logout
-        var logoutResponse = await client.PostAsJsonAsync("/api/auth/logout", new { });
+        // Act — logout with the cookie set manually
+        var logoutClient = _factory.CreateClient();
+        logoutClient.DefaultRequestHeaders.Add("Cookie", $"refreshToken={refreshToken}");
+        var logoutResponse = await logoutClient.PostAsJsonAsync("/api/auth/logout", new { });
         logoutResponse.EnsureSuccessStatusCode();
 
         // Assert — refresh token should be revoked in the DB
@@ -176,46 +174,6 @@ public class AuthEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationFa
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var stored = await db.RefreshTokens.FirstAsync(rt => rt.Token == refreshToken);
         Assert.NotNull(stored.RevokedAt);
-    }
-
-    /// <summary>
-    /// HttpClientHandler с поддержкой CookieContainer для тестов.
-    /// </summary>
-    private class TestHandler : DelegatingHandler
-    {
-        private readonly CookieContainer _container;
-
-        public TestHandler(CookieContainer container)
-        {
-            _container = container;
-            InnerHandler = new HttpClientHandler
-            {
-                AllowAutoRedirect = false,
-                UseDefaultCredentials = true
-            };
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var uri = request.RequestUri!;
-            var cookies = _container.GetCookieHeader(uri);
-            if (!string.IsNullOrEmpty(cookies))
-            {
-                request.Headers.Add("Cookie", cookies);
-            }
-
-            var response = await base.SendAsync(request, cancellationToken);
-
-            if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
-            {
-                foreach (var setCookie in setCookies)
-                {
-                    _container.SetCookies(uri, setCookie);
-                }
-            }
-
-            return response;
-        }
     }
 
     [DockerFact]

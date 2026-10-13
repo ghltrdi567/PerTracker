@@ -1,7 +1,4 @@
-using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PerFunTracker.Infrastructure.Data;
@@ -21,68 +18,13 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
         _factory = factory;
     }
 
-/// <summary>
-/// Создает HttpClient с контейнером кук для тестирования refresh-токенов.
-/// </summary>
-private HttpClient CreateClientWithCookies()
-{
-    var container = new CookieContainer();
-    var handler = new TestHandler(container);
-    var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
-    client.Dispose();
-    var baseAddress = _factory.Server.BaseAddress!;
-    return new HttpClient(handler) { BaseAddress = baseAddress };
-}
-
-/// <summary>
-/// HttpClientHandler с поддержкой CookieContainer для тестов refresh-токенов.
-/// Автоматически добавляет куки в запросы и извлекает из ответов.
-/// </summary>
-private class TestHandler : DelegatingHandler
-{
-    private readonly CookieContainer _container;
-
-    public TestHandler(CookieContainer container)
-    {
-        _container = container;
-        InnerHandler = new HttpClientHandler
-        {
-            AllowAutoRedirect = false,
-            UseDefaultCredentials = true
-        };
-    }
-
-    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        var uri = request.RequestUri!;
-        var cookies = _container.GetCookieHeader(uri);
-        if (!string.IsNullOrEmpty(cookies))
-        {
-            request.Headers.Add("Cookie", cookies);
-        }
-
-        var response = await base.SendAsync(request, cancellationToken);
-
-        if (response.Headers.TryGetValues("Set-Cookie", out var setCookies))
-        {
-            foreach (var setCookie in setCookies)
-            {
-                _container.SetCookies(uri, setCookie);
-            }
-        }
-
-        return response;
-    }
-}
-
     [DockerFact]
     public async Task RefreshToken_Rotation_RevokesOldToken()
     {
-        // Arrange
-        var client = CreateClientWithCookies();
+        // Arrange — factory client (in-memory TestServer, no real TCP).
+        // The old version used a custom handler with a real HttpClientHandler —
+        // real network stack → "Connection refused localhost:80" in CI.
+        var client = _factory.CreateClient();
         var email = $"rotation-{Guid.NewGuid():N}@example.com";
         const string password = "TestPass123!";
 
@@ -112,11 +54,7 @@ private class TestHandler : DelegatingHandler
         });
         loginResponse.EnsureSuccessStatusCode();
 
-        var loginContent = await loginResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var accessToken = loginContent.GetProperty("accessToken").GetString()!;
-
-        // Get the refresh token from the cookie
-        // Note: HandleCookies=false ensures Set-Cookie headers are NOT consumed by the CookieContainerHandler
+        // Get the refresh token from the Set-Cookie response header
         var cookies = loginResponse.Headers.GetValues("Set-Cookie").ToList();
         var refreshCookie = cookies.FirstOrDefault(c => c.StartsWith("refreshToken="));
         Assert.NotNull(refreshCookie);
@@ -126,8 +64,10 @@ private class TestHandler : DelegatingHandler
             .Split(';')[0]
             .Replace("refreshToken=", "");
 
-        // Act: refresh — this should rotate the token (revoke old, issue new)
-        var refreshResponse = await client.PostAsJsonAsync("/api/auth/refresh", new { });
+        // Act: refresh with the cookie set manually — the token should rotate
+        var refreshClient = _factory.CreateClient();
+        refreshClient.DefaultRequestHeaders.Add("Cookie", $"refreshToken={refreshToken}");
+        var refreshResponse = await refreshClient.PostAsJsonAsync("/api/auth/refresh", new { });
         refreshResponse.EnsureSuccessStatusCode();
 
         // Assert: old token should be revoked in the database
@@ -144,7 +84,7 @@ private class TestHandler : DelegatingHandler
     public async Task RefreshToken_Reuse_ReturnsUnauthorized()
     {
         // Arrange
-        var client = CreateClientWithCookies();
+        var client = _factory.CreateClient();
         var email = $"reuse-{Guid.NewGuid():N}@example.com";
         const string password = "TestPass123!";
 
@@ -177,8 +117,10 @@ private class TestHandler : DelegatingHandler
             .Split(';')[0]
             .Replace("refreshToken=", "");
 
-        // First refresh — succeeds
-        var firstRefresh = await client.PostAsJsonAsync("/api/auth/refresh", new { });
+        // First refresh — succeeds (cookie set manually, same as a browser would send it)
+        var firstRefreshClient = _factory.CreateClient();
+        firstRefreshClient.DefaultRequestHeaders.Add("Cookie", $"refreshToken={refreshToken}");
+        var firstRefresh = await firstRefreshClient.PostAsJsonAsync("/api/auth/refresh", new { });
         firstRefresh.EnsureSuccessStatusCode();
 
         // Act: try to reuse the OLD refresh token

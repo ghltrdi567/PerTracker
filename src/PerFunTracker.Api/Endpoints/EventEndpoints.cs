@@ -89,6 +89,14 @@ public static class EventEndpoints
     {
         var userId = GetUserId(ctx);
 
+        // Валидация categoryId: если категория не существует, SaveChangesAsync
+        // упал бы с FK-нарушением → 500. Возвращаем 400 до записи в БД.
+        if (request.CategoryId is { } categoryId &&
+            !await db.Categories.AnyAsync(c => c.Id == categoryId))
+        {
+            return TypedResults.BadRequest(new ErrorResponse(["Category not found."]));
+        }
+
         var evt = new TrackerEvent
         {
             Title = request.Title,
