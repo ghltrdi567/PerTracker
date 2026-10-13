@@ -5,7 +5,10 @@ namespace PerFunTracker.Infrastructure.Email;
 
 /// <summary>
 /// In-process queue using System.Threading.Channels.
-/// Unbounded channel — no backpressure at this scale; swap for a real queue in Phase 2.
+/// Unbounded channel — no backpressure at this scale.
+/// ponytail: in-proc only — messages lost on restart, works for a single API instance.
+/// Upgrade path: another IEmailNotificationQueue impl (RabbitMQ) when 2+ API replicas
+/// appear or lost emails start to hurt — see AGENTS.md "Roadmap status", P2 triggers.
 /// </summary>
 public class ChannelEmailNotificationQueue : IEmailNotificationQueue
 {

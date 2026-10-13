@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using PerFunTracker.Api.BackgroundServices;
 using PerFunTracker.Core.Entities;
 using PerFunTracker.Core.Services;
 using PerFunTracker.Infrastructure.Data;
@@ -110,6 +111,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
             services.RemoveAll<IEmailSender>();
             services.AddSingleton<IEmailSender>(sp =>
                 new StubEmailSender());
+
+            // Remove the EmailNotificationWorker hosted service: it dequeues from the
+            // same singleton Channel that tests read directly. With the worker running
+            // (CI: Docker present), it races NotificationIntegrationTests for messages.
+            var emailWorker = services.SingleOrDefault(
+                d => d.ImplementationType == typeof(EmailNotificationWorker));
+            if (emailWorker is not null)
+                services.Remove(emailWorker);
         });
 
         // Use test environment

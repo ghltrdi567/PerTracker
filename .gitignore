@@ -55,3 +55,7 @@ Thumbs.db
 
 ## palnning
 planning
+
+## Agent tooling (local only, never commit)
+.opencode/
+AGENTS.md

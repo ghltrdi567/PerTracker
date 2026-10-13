@@ -23,66 +23,87 @@ namespace PerFunTracker.Api.BackgroundServices;
 /// - После 3 неудач сообщение теряется (логируется как Error).
 /// - В production лучше добавить dead-letter queue (DLQ) для потерянных сообщений.
 /// </summary>
-public class EmailNotificationWorker : BackgroundService
-{
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<EmailNotificationWorker> _logger;
-
-    private const int MaxRetries = 3;
-    private static readonly TimeSpan[] RetryDelays =
-    [
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(15),
-        TimeSpan.FromSeconds(45),
-    ];
-
-    public EmailNotificationWorker(IServiceScopeFactory scopeFactory, ILogger<EmailNotificationWorker> logger)
+    public class EmailNotificationWorker : BackgroundService
     {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-    }
+        // Queue — singleton, injected directly (safe from a long-lived BackgroundService).
+        private readonly IEmailNotificationQueue _queue;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<EmailNotificationWorker> _logger;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Email notification worker started.");
+        private const int MaxRetries = 3;
+        private static readonly TimeSpan[] RetryDelays =
+        [
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromSeconds(45),
+        ];
 
-        while (!stoppingToken.IsCancellationRequested)
+        public EmailNotificationWorker(
+            IEmailNotificationQueue queue,
+            IServiceScopeFactory scopeFactory,
+            ILogger<EmailNotificationWorker> logger)
         {
-            try
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var queue = scope.ServiceProvider.GetRequiredService<IEmailNotificationQueue>();
-                var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
-
-                var msg = await queue.DequeueAsync(stoppingToken);
-
-                var html = $"""
-                    <h3>Event marked complete: {HtmlEncoder.Default.Encode(msg.EventTitle)}</h3>
-                    <p><strong>{HtmlEncoder.Default.Encode(msg.CompletedByName)}</strong> marked this event as complete on
-                       {msg.CompletedAt:yyyy-MM-dd HH:mm} UTC.</p>
-                    {(msg.Note is not null ? $"<p><em>Note:</em> {HtmlEncoder.Default.Encode(msg.Note)}</p>" : "")}
-                    <p style="color:#888;font-size:12px;">You received this email because you participate in this event
-                       and have email notifications enabled.</p>
-                    """;
-
-                await SendWithRetryAsync(emailSender, msg.ToEmail, msg.EventTitle, html, stoppingToken);
-
-                _logger.LogInformation("Notification sent to {Email} for event '{Event}'",
-                    msg.ToEmail, msg.EventTitle);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send email notification after {Retries} retries. Message dropped.",
-                    MaxRetries);
-            }
+            _queue = queue;
+            _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
-        _logger.LogInformation("Email notification worker stopped.");
-    }
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("Email notification worker started.");
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                EmailNotificationMessage msg;
+                try
+                {
+                    // Dequeue BEFORE creating a DI scope — otherwise the scope
+                    // (with DbContext and other scoped services) sits alive
+                    // during the entire idle wait for the next message.
+                    msg = await _queue.DequeueAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                try
+                {
+                    // Scope per message: IEmailSender is registered as Scoped.
+                    using var scope = _scopeFactory.CreateScope();
+                    var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
+
+                    var html = $"""
+                        <h3>Event marked complete: {HtmlEncoder.Default.Encode(msg.EventTitle)}</h3>
+                        <p><strong>{HtmlEncoder.Default.Encode(msg.CompletedByName)}</strong> marked this event as complete on
+                           {msg.CompletedAt:yyyy-MM-dd HH:mm} UTC.</p>
+                        {(msg.Note is not null ? $"<p><em>Note:</em> {HtmlEncoder.Default.Encode(msg.Note)}</p>" : "")}
+                        <p style="color:#888;font-size:12px;">You received this email because you participate in this event
+                           and have email notifications enabled.</p>
+                        """;
+
+                    await SendWithRetryAsync(emailSender, msg.ToEmail, msg.EventTitle, html, stoppingToken);
+
+                    _logger.LogInformation("Notification sent to {Email} for event '{Event}'",
+                        msg.ToEmail, msg.EventTitle);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // Any exception here = message dropped (poison message or
+                    // retries exhausted in SendWithRetryAsync). Logged with the
+                    // message fields so the dropped email can be traced.
+                    _logger.LogError(ex,
+                        "Email notification to {Email} for event '{Event}' dropped (failed after {Retries} retries or poison message).",
+                        msg.ToEmail, msg.EventTitle, MaxRetries);
+                }
+            }
+
+            _logger.LogInformation("Email notification worker stopped.");
+        }
 
     private async Task SendWithRetryAsync(
         IEmailSender emailSender,
