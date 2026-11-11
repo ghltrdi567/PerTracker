@@ -27,6 +27,7 @@ services:
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=perfuntracker;Username=perfun;Password=perfun_dev;Include Error Detail=true"
       Smtp__Host: mailhog
       Smtp__Port: "1025"
+      Debug__SeeAllEvents: "false"
     ports:
       - "5134:8080"
 

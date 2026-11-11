@@ -15,6 +15,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Debug-флаги (env Debug__SeeAllEvents=true) — значение задаётся при деплое,
+// в репо всегда false. Singleton, чтобы endpoints получали флаг через DI.
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection(DebugOptions.SectionName).Get<DebugOptions>() ?? new DebugOptions());
+
 // JWT authentication
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()!;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -96,6 +101,9 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapGet("/", () => "PerFunTracker API");
+// Публичный конфиг для SPA: фронтенд показывает баннер, пока включён дебаг-режим.
+// Анонимно намеренно — режим должен быть виден всем пользователям.
+app.MapGet("/api/config", (DebugOptions debug) => TypedResults.Ok(new { seeAllEvents = debug.SeeAllEvents }));
 app.MapAuthEndpoints();
 app.MapEventEndpoints();
 app.MapUserEndpoints();

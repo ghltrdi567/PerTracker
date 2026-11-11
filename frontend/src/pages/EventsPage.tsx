@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -18,16 +19,20 @@ import {
 import { Add as AddIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getEvents, createEvent } from '../api/events';
+import { getAppConfig } from '../api/config';
 import { getCategories } from '../api/categories';
 import type { Category, EventResponse } from '../types/api';
+import { ParticipantRole } from '../types/api';
 import { getApiErrors, formatDate } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
+import { useAuth } from '../context/AuthContext';
 
 const PAGE_SIZE = 20;
 
 export default function EventsPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const [items, setItems] = useState<EventResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -36,6 +41,11 @@ export default function EventsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+
+  // Дебаг-режим (задаётся при деплое, GET /api/config):
+  // пока включён — баннер виден всем, админ видит все события с владельцем
+  const [seeAllEvents, setSeeAllEvents] = useState(false);
+  const showOwner = seeAllEvents && !!user?.isAdmin;
 
   // Поля формы создания
   const [title, setTitle] = useState('');
@@ -69,6 +79,13 @@ export default function EventsPage() {
   // Принудительное обновление при каждом заходе на страницу
   useEffect(() => {
     setRefreshKey((k) => k + 1);
+  }, []);
+
+  // Конфиг (флаг дебаг-режима) грузим один раз; сбой — считаем выключенным
+  useEffect(() => {
+    getAppConfig()
+      .then((cfg) => setSeeAllEvents(cfg.seeAllEvents))
+      .catch(() => setSeeAllEvents(false));
   }, []);
 
   const handleLoadMore = () => loadEvents(page + 1, true);
@@ -109,11 +126,20 @@ export default function EventsPage() {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Мои события</Typography>
+        <Typography variant="h4">
+          {showOwner ? 'Все события' : 'Мои события'}
+        </Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
           Создать
         </Button>
       </Box>
+
+      {/* Предупреждение о дебаг-режиме видно ВСЕМ пользователям, пока флаг включён */}
+      {seeAllEvents && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Режим отладки: администратор видит все события пользователей
+        </Alert>
+      )}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -122,34 +148,38 @@ export default function EventsPage() {
       ) : items.length > 0 ? (
         <>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-            {items.map((event) => (
-              <Card key={event.id}>
-                <CardActionArea onClick={() => navigate(`/events/${event.id}`)}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      {event.category && (
-                        <Chip size="small" label={`${event.category.icon ?? ''} ${event.category.name}`} />
+            {items.map((event) => {
+              const owner = event.participants?.find((p) => p.role === ParticipantRole.Owner);
+              return (
+                <Card key={event.id}>
+                  <CardActionArea onClick={() => navigate(`/events/${event.id}`)}>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        {event.category && (
+                          <Chip size="small" label={`${event.category.icon ?? ''} ${event.category.name}`} />
+                        )}
+                      </Box>
+                      <Typography variant="h6">{event.title}</Typography>
+                      {event.description && (
+                        <Typography variant="body2" color="text.secondary" sx={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                        }}>
+                          {event.description}
+                        </Typography>
                       )}
-                    </Box>
-                    <Typography variant="h6">{event.title}</Typography>
-                    {event.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                      }}>
-                        {event.description}
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                        {showOwner && owner && <>Владелец: {owner.displayName} · </>}
+                        {event.participants?.length ?? 0} участн. · {formatDate(event.createdAt)}
                       </Typography>
-                    )}
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      {event.participants?.length ?? 0} участн. · {formatDate(event.createdAt)}
-                    </Typography>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            ))}
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              );
+            })}
           </Box>
           {hasMore && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>

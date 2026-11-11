@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using PerFunTracker.Api.Models;
 using PerFunTracker.Core.Entities;
+using PerFunTracker.Core.Options;
 using PerFunTracker.Core.Services;
 using PerFunTracker.Infrastructure.Data;
 
@@ -40,9 +41,11 @@ public static class EventEndpoints
     }
 
     // --- GET /api/events — paginated list where current user is a participant ---
+    // Дебаг-режим (Debug__SeeAllEvents): админ получает ВСЕ события, не только свои.
 
     private static async Task<Ok<PagedResult<EventResponse>>> ListEvents(
         ApplicationDbContext db,
+        DebugOptions debug,
         HttpContext ctx,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
@@ -51,8 +54,9 @@ public static class EventEndpoints
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
-        var baseQuery = db.Events
-            .Where(e => e.Participants.Any(p => p.UserId == userId));
+        IQueryable<TrackerEvent> baseQuery = db.Events;
+        if (!AdminSeesAll(debug, ctx))
+            baseQuery = baseQuery.Where(e => e.Participants.Any(p => p.UserId == userId));
 
         var total = await baseQuery.CountAsync();
         var totalPages = (int)Math.Ceiling(total / (double)pageSize);
@@ -158,6 +162,7 @@ public static class EventEndpoints
     private static async Task<Results<Ok<EventResponse>, NotFound>> GetEvent(
         Guid id,
         ApplicationDbContext db,
+        DebugOptions debug,
         HttpContext ctx)
     {
         var userId = GetUserId(ctx);
@@ -170,7 +175,8 @@ public static class EventEndpoints
         if (evt is null)
             return TypedResults.NotFound();
 
-        if (!evt.Participants.Any(p => p.UserId == userId))
+        // Дебаг-режим: админ читает чужие события; иначе существование скрыто (404)
+        if (!AdminSeesAll(debug, ctx) && !evt.Participants.Any(p => p.UserId == userId))
             return TypedResults.NotFound(); // hide existence from non-participants
 
         var response = new EventResponse(
@@ -455,6 +461,7 @@ public static class EventEndpoints
     private static async Task<Results<Ok<PagedResult<CompletionResponse>>, NotFound>> ListCompletions(
         Guid id,
         ApplicationDbContext db,
+        DebugOptions debug,
         HttpContext ctx,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
@@ -463,10 +470,11 @@ public static class EventEndpoints
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
-        // Verify the user is a participant
-        var isParticipant = await db.EventParticipants.AnyAsync(p => p.EventId == id && p.UserId == userId);
-        if (!isParticipant)
-            return TypedResults.NotFound();
+        // Дебаг-режим: админ читает завершения любого события
+        var canView = AdminSeesAll(debug, ctx)
+            || await db.EventParticipants.AnyAsync(p => p.EventId == id && p.UserId == userId);
+        if (!canView)
+            return TypedResults.NotFound(); // hide existence from non-participants
 
         var baseQuery = db.EventCompletions
             .Where(c => c.EventId == id);
@@ -489,6 +497,13 @@ public static class EventEndpoints
         var result = new PagedResult<CompletionResponse>(items, page, pageSize, total, totalPages);
         return TypedResults.Ok(result);
     }
+
+    // --- Helpers ---
+
+    // Дебаг-режим «админ видит все»: флаг включается при деплое (Debug__SeeAllEvents,
+    // см. DebugOptions). Claim-проверка та же, что у политики "Admin" в Program.cs.
+    private static bool AdminSeesAll(DebugOptions debug, HttpContext ctx)
+        => debug.SeeAllEvents && ctx.User.HasClaim("is_admin", "true");
 
     // --- Helper: extract user ID from JWT claims ---
 
