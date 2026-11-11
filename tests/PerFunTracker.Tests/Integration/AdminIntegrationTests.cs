@@ -190,6 +190,50 @@ public class AdminIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [DockerFact]
+    public async Task DeleteUser_Admin_UserWithCompletionsInOthersEvents_Returns204()
+    {
+        // Arrange — target user completed SOMEONE ELSE's event (CompletedBy is
+        // Restrict — without manual cleanup DeleteAsync dies on the FK)
+        var ownerEmail = $"delowner-{Guid.NewGuid():N}@example.com";
+        var (ownerClient, eventId) = await _factory.CreateOwnedEventAsync(
+            email: ownerEmail);
+
+        var memberEmail = $"delmember-{Guid.NewGuid():N}@example.com";
+        var memberClient = await _factory.CreateParticipantClientAsync(
+            eventId,
+            email: memberEmail,
+            ownerEmail: ownerEmail);
+
+        var completeResponse = await memberClient.PostAsJsonAsync(
+            $"/api/events/{eventId}/complete", new { note = "member did it" });
+        completeResponse.EnsureSuccessStatusCode();
+
+        string memberUserId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            memberUserId = (await db.Users.FirstAsync(u => u.Email == memberEmail)).Id;
+        }
+
+        var (adminClient, _) = await CreateAdminClientAsync();
+
+        // Act — delete the member who has completions in the owner's event
+        var response = await adminClient.DeleteAsync($"/api/admin/users/{memberUserId}");
+
+        // Assert — 204 (was: 500 on FK + partial delete: events/tokens already gone)
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.Null(await db.Users.FirstOrDefaultAsync(u => u.Id == memberUserId));
+            Assert.Empty(await db.EventCompletions
+                .Where(c => c.CompletedByUserId == memberUserId)
+                .ToListAsync());
+        }
+    }
+
+    [DockerFact]
     public async Task DeleteUser_Admin_Nonexistent_Returns404()
     {
         // Arrange

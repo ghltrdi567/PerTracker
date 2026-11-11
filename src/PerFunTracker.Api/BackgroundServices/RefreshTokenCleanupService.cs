@@ -38,11 +38,17 @@ public class RefreshTokenCleanupService : BackgroundService
     {
         _logger.LogInformation("Refresh token cleanup service started.");
 
+        var firstRun = true;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await Task.Delay(CleanupInterval, stoppingToken);
+                // Первый прогон сразу на старте: хостинги с частыми рестартами
+                // (Render free: сон через 15 мин, cold-start) могут никогда не
+                // дождаться 24-часовой задержки — таблица росла бы бесконечно.
+                if (!firstRun)
+                    await Task.Delay(CleanupInterval, stoppingToken);
+                firstRun = false;
 
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

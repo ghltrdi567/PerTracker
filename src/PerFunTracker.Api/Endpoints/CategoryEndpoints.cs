@@ -46,6 +46,7 @@ public static class CategoryEndpoints
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
+        page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var baseQuery = db.Categories.AsQueryable();
@@ -71,6 +72,12 @@ public static class CategoryEndpoints
         ApplicationDbContext db,
         HttpContext ctx)
     {
+        // Переполнение varchar в Postgres (22001) даёт 500 — отсекаем до записи.
+        if (request.Name?.Length > Category.NameMaxLength)
+            return TypedResults.BadRequest(new ErrorResponse([$"Name must be at most {Category.NameMaxLength} characters."]));
+        if (request.Icon?.Length > Category.IconMaxLength)
+            return TypedResults.BadRequest(new ErrorResponse([$"Icon must be at most {Category.IconMaxLength} characters."]));
+
         // Check for duplicate name (case-insensitive via PostgreSQL ILIKE)
         if (await db.Categories.AnyAsync(c => EF.Functions.ILike(c.Name, request.Name)))
             return TypedResults.BadRequest(new ErrorResponse(["A category with this name already exists."]));

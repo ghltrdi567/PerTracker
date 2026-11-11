@@ -26,8 +26,8 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
         builder.Entity<TrackerEvent>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.Title).IsRequired().HasMaxLength(200);
-            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.Title).IsRequired().HasMaxLength(TrackerEvent.TitleMaxLength);
+            e.Property(x => x.Description).HasMaxLength(TrackerEvent.DescriptionMaxLength);
             e.Property(x => x.OwnerUserId).IsRequired();
             e.Property(x => x.CreatedAt).IsRequired();
 
@@ -46,8 +46,8 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
         builder.Entity<Category>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.Name).IsRequired().HasMaxLength(100);
-            e.Property(x => x.Icon).HasMaxLength(50);
+            e.Property(x => x.Name).IsRequired().HasMaxLength(Category.NameMaxLength);
+            e.Property(x => x.Icon).HasMaxLength(Category.IconMaxLength);
             e.Property(x => x.CreatedAt).IsRequired();
             e.HasIndex(x => x.Name).IsUnique();
         });
@@ -91,7 +91,7 @@ public class ApplicationDbContext : IdentityDbContext<AppUser>
 
             e.Property(x => x.CompletedByUserId).IsRequired();
             e.Property(x => x.CompletedAt).IsRequired();
-            e.Property(x => x.Note).HasMaxLength(1000);
+            e.Property(x => x.Note).HasMaxLength(EventCompletion.NoteMaxLength);
         });
 
         // RefreshToken

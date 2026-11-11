@@ -6,6 +6,10 @@ namespace PerFunTracker.Core.Entities;
 /// </summary>
 public class Category
 {
+    // Лимиты совпадают с varchar-колонками в ApplicationDbContext.
+    public const int NameMaxLength = 100;
+    public const int IconMaxLength = 50;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>Display name of the category.</summary>

@@ -1,13 +1,11 @@
 namespace PerFunTracker.Core.Services;
 
 /// <summary>
-/// A message enqueued when an event is marked complete.
-/// Consumed by the background email notifier.
+/// A generic outbound email: enqueued by API endpoints (registration confirmation,
+/// completion notifications) and sent by the background email worker.
+/// HTML is prebuilt at the enqueue site — the worker only transports it.
 /// </summary>
 public record EmailNotificationMessage(
     string ToEmail,
-    string ToDisplayName,
-    string EventTitle,
-    string CompletedByName,
-    DateTime CompletedAt,
-    string? Note);
+    string Subject,
+    string HtmlBody);

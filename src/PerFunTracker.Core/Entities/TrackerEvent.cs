@@ -6,6 +6,10 @@ namespace PerFunTracker.Core.Entities;
 /// </summary>
 public class TrackerEvent
 {
+    // Лимиты совпадают с varchar-колонками в ApplicationDbContext.
+    public const int TitleMaxLength = 200;
+    public const int DescriptionMaxLength = 2000;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>Title of the event.</summary>

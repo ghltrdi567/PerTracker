@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
@@ -38,13 +37,13 @@ public static class AdminEndpoints
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
 
-        var query = db.Users.OrderByDescending(u => u.CreatedAt);
+        IQueryable<AppUser> query = db.Users.OrderByDescending(u => u.CreatedAt);
 
         // Фильтр по поиску (email или display name)
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.ToLower();
-            query = (IOrderedQueryable<AppUser>)query.Where(u =>
+            query = query.Where(u =>
                 u.Email!.ToLower().Contains(search) ||
                 u.DisplayName.ToLower().Contains(search));
         }
@@ -82,9 +81,11 @@ public static class AdminEndpoints
     // Порядок:
     // 1. Находим все события, где пользователь — владелец, удаляем.
     // 2. Находим все refresh-токены пользователя, удаляем (FK на AppUser).
-    // 3. EventParticipant удалится каскадно через EF Core (FK с OnDelete.Cascade).
-    // 4. Сохраняем всё ДО DeleteAsync(user), чтобы не получить FK-ошибку.
-    // 5. Удаляем пользователя через UserManager.DeleteAsync.
+    // 3. Удаляем завершения ПОЛЬЗОВАТЕЛЯ в чужих событиях — CompletedBy
+    //    настроен как Restrict, каскада нет, без этого DeleteAsync упадёт по FK.
+    // 4. EventParticipant удалится каскадно через EF Core (FK с OnDelete.Cascade).
+    // 5. Сохраняем всё ДО DeleteAsync(user), чтобы не получить FK-ошибку.
+    // 6. Удаляем пользователя через UserManager.DeleteAsync.
 
     private static async Task<Results<NoContent, NotFound, BadRequest<ErrorResponse>>> DeleteUser(
         string userId,
@@ -108,6 +109,11 @@ public static class AdminEndpoints
             .ToListAsync();
         db.RefreshTokens.RemoveRange(tokens);
 
+        // CompletedBy = Restrict: завершения в ЧУЖИХ событиях не каскадятся
+        db.EventCompletions.RemoveRange(await db.EventCompletions
+            .Where(c => c.CompletedByUserId == userId)
+            .ToListAsync());
+
         // EventParticipant удалится каскадом при DeleteAsync(user) через Identity
         // Сохраняем всё до удаления пользователя
         await db.SaveChangesAsync();
@@ -128,9 +134,8 @@ public static class AdminEndpoints
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
 
+        // Include перед Select(...) игнорируется EF — проекция сама тянет нужное
         var query = db.Events
-            .Include(e => e.Owner)
-            .Include(e => e.Category)
             .OrderByDescending(e => e.CreatedAt);
 
         var total = await query.CountAsync();
@@ -168,13 +173,6 @@ public static class AdminEndpoints
         await db.SaveChangesAsync();
 
         return TypedResults.NoContent();
-    }
-
-    private static string GetUserId(HttpContext ctx)
-    {
-        return ctx.User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)
-            ?? ctx.User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new UnauthorizedAccessException("User ID not found in token.");
     }
 }
 

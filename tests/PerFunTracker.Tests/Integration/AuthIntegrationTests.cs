@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using PerFunTracker.Core.Services;
 using PerFunTracker.Infrastructure.Data;
 using Xunit;
 
@@ -78,6 +79,45 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
             Assert.NotNull(oldStored);
             Assert.NotNull(oldStored!.RevokedAt); // old token should be revoked
         }
+    }
+
+    [DockerFact]
+    public async Task Register_EnqueuesConfirmationEmail()
+    {
+        // Arrange — registration must go through the queue, not SMTP inline:
+        // a throw there would 500 with an already-committed, permanently
+        // unconfirmed user (no resend endpoint exists)
+        var client = _factory.CreateClient();
+        var email = $"regq-{Guid.NewGuid():N}@example.com";
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email,
+            password = "TestPass123!",
+            displayName = "Reg Queue"
+        });
+        response.EnsureSuccessStatusCode();
+
+        // Assert — the confirmation message lands in the queue addressed to the user
+        var queue = _factory.Services.GetRequiredService<IEmailNotificationQueue>();
+        string? found = null;
+        while (found is null)
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+            try
+            {
+                var msg = await queue.DequeueAsync(cts.Token);
+                if (msg.ToEmail == email)
+                    found = msg.ToEmail;
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+
+        Assert.Equal(email, found);
     }
 
     [DockerFact]

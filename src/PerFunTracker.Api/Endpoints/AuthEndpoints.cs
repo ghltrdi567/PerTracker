@@ -39,7 +39,7 @@ public static class AuthEndpoints
         RegisterRequest request,
         UserManager<AppUser> userManager,
         ApplicationDbContext db,
-        IEmailSender emailSender,
+        IEmailNotificationQueue notificationQueue,
         HttpContext ctx)
     {
         // Первый зарегистрированный пользователь становится админом
@@ -73,7 +73,13 @@ public static class AuthEndpoints
             <p style="color:#888;font-size:12px;">If you didn't create an account, you can ignore this email.</p>
             """;
 
-        await emailSender.SendAsync(user.Email!, "Confirm your email — PerFunTracker", html);
+        // Письмо — через очередь, не напрямую: Identity уже закоммитил пользователя,
+        // и исключение из SMTP здесь дало бы 500 при «занятом» навсегда email без
+        // resend-эндпоинта. Воркер повторит отправку и залогирует дроп вместо падения.
+        await notificationQueue.EnqueueAsync(new EmailNotificationMessage(
+            user.Email!,
+            "Confirm your email — PerFunTracker",
+            html));
 
         return TypedResults.Created();
     }

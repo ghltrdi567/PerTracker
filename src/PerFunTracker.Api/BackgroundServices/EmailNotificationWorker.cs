@@ -1,4 +1,3 @@
-using System.Text.Encodings.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,7 +11,8 @@ namespace PerFunTracker.Api.BackgroundServices;
 /// Retries failed sends up to 3 times with exponential backoff.
 ///
 /// Паттерн "Producer-Consumer" через Channel:
-/// - Producer: EventEndpoints.MarkComplete ставит сообщения в очередь (EnqueueAsync).
+/// - Producer: EventEndpoints.MarkComplete и AuthEndpoints.Register ставят
+///   сообщения в очередь (EnqueueAsync), HTML собирается на стороне продюсера.
 /// - Consumer: этот воркер читает сообщения (DequeueAsync) и отправляет email.
 /// - Очередь (ChannelEmailNotificationQueue) — in-process, unbounded.
 /// - В Phase 2 можно заменить на RabbitMQ/Redis без изменения бизнес-логики.
@@ -73,19 +73,10 @@ namespace PerFunTracker.Api.BackgroundServices;
                     using var scope = _scopeFactory.CreateScope();
                     var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
 
-                    var html = $"""
-                        <h3>Event marked complete: {HtmlEncoder.Default.Encode(msg.EventTitle)}</h3>
-                        <p><strong>{HtmlEncoder.Default.Encode(msg.CompletedByName)}</strong> marked this event as complete on
-                           {msg.CompletedAt:yyyy-MM-dd HH:mm} UTC.</p>
-                        {(msg.Note is not null ? $"<p><em>Note:</em> {HtmlEncoder.Default.Encode(msg.Note)}</p>" : "")}
-                        <p style="color:#888;font-size:12px;">You received this email because you participate in this event
-                           and have email notifications enabled.</p>
-                        """;
+                    await SendWithRetryAsync(emailSender, msg.ToEmail, msg.Subject, msg.HtmlBody, stoppingToken);
 
-                    await SendWithRetryAsync(emailSender, msg.ToEmail, msg.EventTitle, html, stoppingToken);
-
-                    _logger.LogInformation("Notification sent to {Email} for event '{Event}'",
-                        msg.ToEmail, msg.EventTitle);
+                    _logger.LogInformation("Email '{Subject}' sent to {Email}",
+                        msg.Subject, msg.ToEmail);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -97,8 +88,8 @@ namespace PerFunTracker.Api.BackgroundServices;
                     // retries exhausted in SendWithRetryAsync). Logged with the
                     // message fields so the dropped email can be traced.
                     _logger.LogError(ex,
-                        "Email notification to {Email} for event '{Event}' dropped (failed after {Retries} retries or poison message).",
-                        msg.ToEmail, msg.EventTitle, MaxRetries);
+                        "Email '{Subject}' to {Email} dropped (failed after {Retries} retries or poison message).",
+                        msg.Subject, msg.ToEmail, MaxRetries);
                 }
             }
 

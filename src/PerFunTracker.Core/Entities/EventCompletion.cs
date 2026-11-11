@@ -5,6 +5,9 @@ namespace PerFunTracker.Core.Entities;
 /// </summary>
 public class EventCompletion
 {
+    // Лимит совпадает с varchar-колонкой в ApplicationDbContext.
+    public const int NoteMaxLength = 1000;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid EventId { get; set; }

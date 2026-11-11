@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +48,7 @@ public static class EventEndpoints
         [FromQuery] int pageSize = 20)
     {
         var userId = GetUserId(ctx);
+        page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
         var baseQuery = db.Events
@@ -97,6 +99,12 @@ public static class EventEndpoints
         {
             return TypedResults.BadRequest(new ErrorResponse(["Category not found."]));
         }
+
+        // Валидация длины: переполнение varchar в Postgres (22001) даёт 500.
+        if (request.Title?.Length > TrackerEvent.TitleMaxLength)
+            return TypedResults.BadRequest(new ErrorResponse([$"Title must be at most {TrackerEvent.TitleMaxLength} characters."]));
+        if (request.Description?.Length > TrackerEvent.DescriptionMaxLength)
+            return TypedResults.BadRequest(new ErrorResponse([$"Description must be at most {TrackerEvent.DescriptionMaxLength} characters."]));
 
         var evt = new TrackerEvent
         {
@@ -184,7 +192,7 @@ public static class EventEndpoints
 
     // --- PUT /api/events/{id} — update event (owner only) ---
 
-    private static async Task<Results<Ok<EventResponse>, NotFound, ForbidHttpResult>> UpdateEvent(
+    private static async Task<Results<Ok<EventResponse>, NotFound, ForbidHttpResult, BadRequest<ErrorResponse>>> UpdateEvent(
         Guid id,
         UpdateEventRequest request,
         ApplicationDbContext db,
@@ -203,11 +211,27 @@ public static class EventEndpoints
         if (evt.OwnerUserId != userId)
             return TypedResults.Forbid();
 
+        // Тот же фикс, что и в CreateEvent: несуществующий categoryId → FK-нарушение → 500
+        if (request.CategoryId is { } categoryId &&
+            !await db.Categories.AnyAsync(c => c.Id == categoryId))
+        {
+            return TypedResults.BadRequest(new ErrorResponse(["Category not found."]));
+        }
+
+        if (request.Title?.Length > TrackerEvent.TitleMaxLength)
+            return TypedResults.BadRequest(new ErrorResponse([$"Title must be at most {TrackerEvent.TitleMaxLength} characters."]));
+        if (request.Description?.Length > TrackerEvent.DescriptionMaxLength)
+            return TypedResults.BadRequest(new ErrorResponse([$"Description must be at most {TrackerEvent.DescriptionMaxLength} characters."]));
+
         evt.Title = request.Title;
         evt.Description = request.Description;
         evt.CategoryId = request.CategoryId;
 
         await db.SaveChangesAsync();
+
+        // После смены FK навигация Category не перезагрузится сама — без этого
+        // ответ нёс бы старую (или null) категорию при актуальной новой в БД.
+        await db.Entry(evt).Reference(e => e.Category).LoadAsync();
 
         var response = new EventResponse(
             evt.Id,
@@ -352,7 +376,7 @@ public static class EventEndpoints
 
     // --- POST /api/events/{id}/complete — mark event complete (participants only) ---
 
-    private static async Task<Results<Created<CompletionResponse>, NotFound>> MarkComplete(
+    private static async Task<Results<Created<CompletionResponse>, NotFound, BadRequest<ErrorResponse>>> MarkComplete(
         Guid id,
         MarkCompleteRequest request,
         ApplicationDbContext db,
@@ -360,6 +384,10 @@ public static class EventEndpoints
         HttpContext ctx)
     {
         var userId = GetUserId(ctx);
+
+        // Переполнение varchar в Postgres (22001) даёт 500 — отсекаем до записи.
+        if (request.Note?.Length > EventCompletion.NoteMaxLength)
+            return TypedResults.BadRequest(new ErrorResponse([$"Note must be at most {EventCompletion.NoteMaxLength} characters."]));
 
         var evt = await db.Events
             .Include(e => e.Participants).ThenInclude(p => p.User)
@@ -387,6 +415,16 @@ public static class EventEndpoints
         db.EventCompletions.Add(completion);
         await db.SaveChangesAsync();
 
+        // HTML собирается здесь (у enqueue-сайта) — воркер только отправляет
+        var html = $"""
+            <h3>Event marked complete: {HtmlEncoder.Default.Encode(evt.Title)}</h3>
+            <p><strong>{HtmlEncoder.Default.Encode(completer.DisplayName)}</strong> marked this event as complete on
+               {completion.CompletedAt:yyyy-MM-dd HH:mm} UTC.</p>
+            {(request.Note is not null ? $"<p><em>Note:</em> {HtmlEncoder.Default.Encode(request.Note)}</p>" : "")}
+            <p style="color:#888;font-size:12px;">You received this email because you participate in this event
+               and have email notifications enabled.</p>
+            """;
+
         // Enqueue email notifications for OTHER participants with the flag on
         foreach (var p in evt.Participants)
         {
@@ -396,15 +434,10 @@ public static class EventEndpoints
             if (!p.User!.NotifyByEmailOnCompletion)
                 continue;
 
-            var message = new EmailNotificationMessage(
+            await notificationQueue.EnqueueAsync(new EmailNotificationMessage(
                 p.User.Email!,
-                p.User.DisplayName,
-                evt.Title,
-                completer.DisplayName,
-                completion.CompletedAt,
-                request.Note);
-
-            await notificationQueue.EnqueueAsync(message);
+                $"Event complete: {evt.Title}",
+                html));
         }
 
         var response = new CompletionResponse(
@@ -427,6 +460,7 @@ public static class EventEndpoints
         [FromQuery] int pageSize = 50)
     {
         var userId = GetUserId(ctx);
+        page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
         // Verify the user is a participant

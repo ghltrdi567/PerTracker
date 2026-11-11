@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using PerFunTracker.Core.Entities;
 using PerFunTracker.Infrastructure.Data;
 using Xunit;
 
@@ -64,6 +65,117 @@ public class EventEdgeCaseIntegrationTests : IClassFixture<CustomWebApplicationF
 
         // Assert — 400, not 500 (without validation SaveChanges would fail on the FK)
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [DockerFact]
+    public async Task UpdateEvent_WithNonExistentCategory_Returns400()
+    {
+        // Arrange — same rule as POST: PUT must not 500 on an FK violation
+        var (client, eventId) = await _factory.CreateOwnedEventAsync(
+            email: $"edge-putcat-{Guid.NewGuid():N}@example.com");
+
+        // Act — update with a categoryId that doesn't exist
+        var response = await client.PutAsJsonAsync($"/api/events/{eventId}", new
+        {
+            title = "Updated title",
+            description = (string?)null,
+            categoryId = Guid.NewGuid()
+        });
+
+        // Assert — 400, not 500 (was: FK violation on SaveChanges)
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [DockerFact]
+    public async Task UpdateEvent_CategoryChanged_ResponseCarriesNewCategory()
+    {
+        // Arrange — a category inserted directly, event without one
+        Guid categoryId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var cat = new Category { Name = $"EdgeCat-{Guid.NewGuid():N}", CreatedAt = DateTime.UtcNow };
+            db.Categories.Add(cat);
+            await db.SaveChangesAsync();
+            categoryId = cat.Id;
+        }
+
+        var (client, eventId) = await _factory.CreateOwnedEventAsync(
+            email: $"edge-catnav-{Guid.NewGuid():N}@example.com");
+
+        // Act — assign the category via PUT
+        var response = await client.PutAsJsonAsync($"/api/events/{eventId}", new
+        {
+            title = "With category",
+            description = (string?)null,
+            categoryId
+        });
+        response.EnsureSuccessStatusCode();
+
+        // Assert — response reports the NEW category (nav reload after FK change)
+        var content = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(categoryId, content.GetProperty("category").GetProperty("id").GetGuid());
+    }
+
+    [DockerFact]
+    public async Task OverlongInput_Returns400_Not500()
+    {
+        // Arrange — varchar overflow (Postgres 22001) must be a 400, not a 500
+        var (client, eventId) = await _factory.CreateOwnedEventAsync(
+            email: $"edge-len-{Guid.NewGuid():N}@example.com");
+
+        // Act + Assert — title > 200
+        var longTitle = await client.PostAsJsonAsync("/api/events", new
+        {
+            title = new string('a', 201),
+            description = (string?)null
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, longTitle.StatusCode);
+
+        // description > 2000
+        var longDesc = await client.PostAsJsonAsync("/api/events", new
+        {
+            title = "Valid title",
+            description = new string('b', 2001)
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, longDesc.StatusCode);
+
+        // PUT with over-long title
+        var longPut = await client.PutAsJsonAsync($"/api/events/{eventId}", new
+        {
+            title = new string('c', 201),
+            description = (string?)null
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, longPut.StatusCode);
+
+        // completion note > 1000
+        var longNote = await client.PostAsJsonAsync($"/api/events/{eventId}/complete", new
+        {
+            note = new string('d', 1001)
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, longNote.StatusCode);
+    }
+
+    [DockerFact]
+    public async Task Pagination_PageZeroOrNegative_Returns200()
+    {
+        // Arrange — page < 1 used to hit Skip(-N) → 500 on every list endpoint
+        var (client, eventId) = await _factory.CreateOwnedEventAsync(
+            email: $"edge-page-{Guid.NewGuid():N}@example.com");
+
+        // Act + Assert — events
+        var events = await client.GetAsync("/api/events?page=0");
+        Assert.Equal(System.Net.HttpStatusCode.OK, events.StatusCode);
+        var eventsContent = await events.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1, eventsContent.GetProperty("page").GetInt32());
+
+        // completions
+        var completions = await client.GetAsync($"/api/events/{eventId}/completions?page=-5");
+        Assert.Equal(System.Net.HttpStatusCode.OK, completions.StatusCode);
+
+        // categories
+        var categories = await client.GetAsync("/api/categories?page=0");
+        Assert.Equal(System.Net.HttpStatusCode.OK, categories.StatusCode);
     }
 
     [DockerFact]

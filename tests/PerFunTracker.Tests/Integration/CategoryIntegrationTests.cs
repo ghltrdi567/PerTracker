@@ -133,6 +133,25 @@ public class CategoryIntegrationTests : IClassFixture<CustomWebApplicationFactor
     }
 
     [DockerFact]
+    public async Task CreateCategory_OverlongName_Returns400()
+    {
+        // Arrange — varchar(100) overflow must be 400, not 500
+        var adminEmail = $"cat-len-{Guid.NewGuid():N}@example.com";
+        await CreateAdminAsync(_factory, adminEmail, "AdminPass123!");
+        var adminClient = await _factory.CreateAuthenticatedClientAsync(adminEmail, "AdminPass123!");
+
+        // Act
+        var response = await adminClient.PostAsJsonAsync("/api/categories", new
+        {
+            name = new string('x', 101),
+            icon = (string?)null
+        });
+
+        // Assert
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [DockerFact]
     public async Task DeleteCategory_Admin_Returns204()
     {
         // Arrange

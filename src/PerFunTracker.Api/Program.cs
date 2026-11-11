@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using PerFunTracker.Api.BackgroundServices;
 using PerFunTracker.Api.Endpoints;
@@ -63,7 +64,10 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
-builder.Services.AddHealthChecks();
+// Пустой AddHealthChecks() всегда отвечает 200 — оркестратор считает
+// сломанный инстанс живым. Проверяем доступность БД.
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database");
 builder.Services.AddHostedService<EmailNotificationWorker>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
@@ -111,3 +115,12 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+/// <summary>Health check: доступна ли база (CanConnectAsync через scope DI).</summary>
+internal sealed class DatabaseHealthCheck(ApplicationDbContext db) : IHealthCheck
+{
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+        => await db.Database.CanConnectAsync(cancellationToken)
+            ? HealthCheckResult.Healthy("Database reachable")
+            : HealthCheckResult.Unhealthy("Database unreachable");
+}
